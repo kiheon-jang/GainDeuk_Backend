@@ -1,0 +1,77 @@
+{
+  "name": "gaindeuk-backend",
+  "version": "1.0.0",
+  "description": "GainDeuk - 암호화폐 신호 분석 MVP 백엔드",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "db:migrate": "node scripts/migrate.js",
+    "build": "echo 'No build step required'",
+    "docker:build": "docker build -t gaindeuk-backend .",
+    "docker:run": "docker-compose up -d",
+    "docker:stop": "docker-compose down"
+  },
+  "keywords": [
+    "cryptocurrency",
+    "signal-analysis",
+    "trading",
+    "api",
+    "nodejs",
+    "mongodb",
+    "redis"
+  ],
+  "author": "GainDeuk Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^8.0.3",
+    "redis": "^4.6.10",
+    "ioredis": "^5.3.2",
+    "node-cron": "^3.0.3",
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "sentiment": "^5.0.2",
+    "natural": "^6.7.0",
+    "firebase-admin": "^11.11.1",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0",
+    "winston": "^3.11.0",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "bullmq": "^4.15.4",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "chai": "^4.3.10",
+    "eslint": "^8.55.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaindeuk/gaindeuk-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gaindeuk/gaindeuk-backend/issues"
+  },
+  "homepage": "https://github.com/gaindeuk/gaindeuk-backend#readme"
+}

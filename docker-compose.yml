@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # GainDeuk Backend Application
+  gaindeuk-backend:
+    build: .
+    container_name: gaindeuk-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongo:27017/gaindeuk
+      - REDIS_URL=redis://redis:6379
+      - SCHEDULER_ENABLED=true
+      - LOG_LEVEL=info
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - gaindeuk-network
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: gaindeuk-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=gaindeuk
+    volumes:
+      - mongo_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    restart: unless-stopped
+    networks:
+      - gaindeuk-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: gaindeuk-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - gaindeuk-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MongoDB Express (Database Admin UI)
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: gaindeuk-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=password
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - gaindeuk-network
+    profiles:
+      - admin
+
+  # Redis Commander (Redis Admin UI)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: gaindeuk-redis-commander
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - gaindeuk-network
+    profiles:
+      - admin
+
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  gaindeuk-network:
+    driver: bridge
