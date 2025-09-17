@@ -1,6 +1,9 @@
 const { expect } = require('chai');
 const SignalCalculatorService = require('../../src/services/SignalCalculatorService');
 
+// 테스트 설정 파일 import
+require('../setup');
+
 describe('SignalCalculatorService', () => {
   let signalCalculator;
 

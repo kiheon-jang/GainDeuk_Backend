@@ -41,8 +41,7 @@ const coinSchema = new mongoose.Schema({
   },
   marketCapRank: {
     type: Number,
-    min: 1,
-    index: true
+    min: 1
   },
   totalVolume: {
     type: Number,
@@ -208,5 +207,71 @@ coinSchema.pre('save', function(next) {
 coinSchema.post('save', function(doc) {
   console.log(`Coin saved: ${doc.symbol} (${doc.name})`);
 });
+
+// 정적 메서드
+coinSchema.statics.updateOrCreate = async function(coinData) {
+  try {
+    const existingCoin = await this.findOne({ coinId: coinData.id });
+    
+    if (existingCoin) {
+      // 기존 코인 업데이트
+      existingCoin.name = coinData.name;
+      existingCoin.symbol = coinData.symbol;
+      existingCoin.currentPrice = coinData.current_price;
+      existingCoin.marketCap = coinData.market_cap;
+      existingCoin.marketCapRank = coinData.market_cap_rank;
+      existingCoin.totalVolume = coinData.total_volume;
+      existingCoin.priceChange = {
+        '1h': coinData.price_change_percentage_1h || 0,
+        '24h': coinData.price_change_percentage_24h || 0,
+        '7d': coinData.price_change_percentage_7d || 0,
+        '30d': coinData.price_change_percentage_30d || 0
+      };
+      existingCoin.lastUpdated = new Date();
+      
+      // 메타데이터 업데이트
+      if (coinData.circulating_supply) existingCoin.metadata.circulatingSupply = coinData.circulating_supply;
+      if (coinData.total_supply) existingCoin.metadata.totalSupply = coinData.total_supply;
+      if (coinData.max_supply) existingCoin.metadata.maxSupply = coinData.max_supply;
+      if (coinData.ath) existingCoin.metadata.ath = coinData.ath;
+      if (coinData.ath_change_percentage) existingCoin.metadata.athChangePercentage = coinData.ath_change_percentage;
+      if (coinData.atl) existingCoin.metadata.atl = coinData.atl;
+      if (coinData.atl_change_percentage) existingCoin.metadata.atlChangePercentage = coinData.atl_change_percentage;
+      
+      return await existingCoin.save();
+    } else {
+      // 새 코인 생성
+      const newCoin = new this({
+        coinId: coinData.id,
+        name: coinData.name,
+        symbol: coinData.symbol,
+        currentPrice: coinData.current_price,
+        marketCap: coinData.market_cap,
+        marketCapRank: coinData.market_cap_rank,
+        totalVolume: coinData.total_volume,
+        priceChange: {
+          '1h': coinData.price_change_percentage_1h || 0,
+          '24h': coinData.price_change_percentage_24h || 0,
+          '7d': coinData.price_change_percentage_7d || 0,
+          '30d': coinData.price_change_percentage_30d || 0
+        },
+        lastUpdated: new Date(),
+        metadata: {
+          circulatingSupply: coinData.circulating_supply || 0,
+          totalSupply: coinData.total_supply || 0,
+          maxSupply: coinData.max_supply || 0,
+          ath: coinData.ath || 0,
+          athChangePercentage: coinData.ath_change_percentage || 0,
+          atl: coinData.atl || 0,
+          atlChangePercentage: coinData.atl_change_percentage || 0
+        }
+      });
+      
+      return await newCoin.save();
+    }
+  } catch (error) {
+    throw new Error(`Failed to update or create coin ${coinData.id}: ${error.message}`);
+  }
+};
 
 module.exports = mongoose.model('Coin', coinSchema);

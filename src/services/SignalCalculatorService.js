@@ -84,7 +84,7 @@ class SignalCalculatorService {
         recommendation,
         timeframe,
         priority,
-        rank: 0, // 나중에 설정
+        rank: 1, // 최소값 1로 설정
         currentPrice: priceData.current_price,
         marketCap: priceData.market_cap,
         metadata: {

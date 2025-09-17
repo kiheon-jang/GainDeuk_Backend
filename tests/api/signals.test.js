@@ -2,7 +2,48 @@ const request = require('supertest');
 const { expect } = require('chai');
 const app = require('../../src/app');
 
+// 테스트 설정 파일 import
+require('../setup');
+
 describe('Signals API', () => {
+  let testSignalId;
+
+  beforeEach(async () => {
+    // 각 테스트마다 새로운 테스트용 Signal 데이터 생성
+    const Signal = require('../../src/models/Signal');
+    const testSignal = new Signal({
+      coinId: 'bitcoin',
+      symbol: 'BTC',
+      name: 'Bitcoin',
+      timeframe: 'DAY_TRADING',
+      finalScore: 85,
+      recommendation: {
+        action: 'BUY',
+        confidence: 'HIGH'
+      },
+      priority: 'high_priority',
+      breakdown: {
+        price: 80,
+        volume: 75,
+        market: 85,
+        sentiment: 90,
+        whale: 70
+      },
+      currentPrice: 50000,
+      marketCap: 1000000000000,
+      metadata: {
+        rsi: 45,
+        macd: 0.5,
+        bollinger: 'middle',
+        support: 48000,
+        resistance: 52000
+      }
+    });
+    
+    await testSignal.save();
+    testSignalId = testSignal._id;
+  });
+
   describe('GET /api/signals', () => {
     it('should return signals with pagination', async () => {
       const response = await request(app)

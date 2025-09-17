@@ -62,8 +62,7 @@ const signalSchema = new mongoose.Schema({
     action: { 
       type: String, 
       enum: ['STRONG_BUY', 'BUY', 'HOLD', 'WEAK_SELL', 'SELL', 'STRONG_SELL'],
-      required: true,
-      index: true
+      required: true
     },
     confidence: { 
       type: String, 
@@ -74,14 +73,12 @@ const signalSchema = new mongoose.Schema({
   timeframe: {
     type: String,
     enum: ['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM'],
-    required: true,
-    index: true
+    required: true
   },
   priority: {
     type: String,
     enum: ['high_priority', 'medium_priority', 'low_priority'],
-    required: true,
-    index: true
+    required: true
   },
   rank: {
     type: Number,

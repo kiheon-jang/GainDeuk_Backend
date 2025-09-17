@@ -98,7 +98,8 @@ class CoinGeckoService {
         locale: 'en'
       };
 
-      const response = await this.axios.get('/coins/markets', { params });
+      // 재시도 로직이 포함된 API 호출
+      const response = await this.makeApiCallWithRetry('/coins/markets', { params });
       marketData = response.data;
       
       // 5분 캐시
@@ -107,8 +108,13 @@ class CoinGeckoService {
       logger.success(`Fetched market data batch ${page} (${marketData.length} coins)`);
       return marketData;
     } catch (error) {
-      logger.error(`Failed to fetch market data batch ${page}:`, error);
-      throw new Error(`Failed to fetch market data batch ${page}: ${error.message}`);
+      // 순환 참조를 방지하기 위해 에러 객체 대신 메시지만 로깅
+      const errorMessage = error.response?.status === 429 
+        ? 'Rate limit exceeded' 
+        : error.message || 'Unknown error';
+      
+      logger.error(`Failed to fetch market data batch ${page}: ${errorMessage}`);
+      throw new Error(`Failed to fetch market data batch ${page}: ${errorMessage}`);
     }
   }
 
@@ -276,6 +282,49 @@ class CoinGeckoService {
       logger.error('Rate limit check failed:', error);
       throw error;
     }
+  }
+
+  // 재시도 로직이 포함된 API 호출
+  async makeApiCallWithRetry(endpoint, config, maxRetries = 3) {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await this.axios.get(endpoint, config);
+        
+        // API 호출 카운트 증가
+        await this.cacheService.incrementApiCallsToday('coingecko');
+        
+        return response;
+      } catch (error) {
+        lastError = error;
+        
+        // Rate limit 에러인 경우 지연 후 재시도
+        if (error.response?.status === 429) {
+          const retryAfter = error.response.headers['retry-after'] || Math.pow(2, attempt);
+          const delayMs = parseInt(retryAfter) * 1000;
+          
+          logger.warning(`Rate limit hit, retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})`);
+          
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            continue;
+          }
+        }
+        
+        // 다른 에러인 경우 즉시 실패
+        if (attempt === maxRetries) {
+          break;
+        }
+        
+        // 일반적인 재시도 지연
+        const delayMs = Math.pow(2, attempt) * 1000;
+        logger.warning(`API call failed, retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    
+    throw lastError;
   }
 
   // API 호출 횟수 증가

@@ -214,6 +214,21 @@ class CacheService {
     }
   }
 
+  async incrementApiCallsToday(endpoint) {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `api_calls:${endpoint}:${today}`;
+    
+    try {
+      const count = await this.redis.incr(key);
+      // 24시간 후 만료
+      await this.redis.expire(key, 86400);
+      return count;
+    } catch (error) {
+      logger.error('API calls increment error:', { endpoint, error: error.message });
+      return 0;
+    }
+  }
+
   async getApiCallsThisMonth(endpoint) {
     const month = new Date().toISOString().slice(0, 7);
     const pattern = `api_calls:${endpoint}:${month}-*`;
@@ -346,6 +361,21 @@ class CacheService {
     } catch (error) {
       logger.error('Redis ping error:', error);
       return false;
+    }
+  }
+
+  // 패턴으로 캐시 삭제
+  async clearPattern(pattern) {
+    try {
+      const keys = await this.redis.keys(pattern);
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        logger.info(`Cleared ${keys.length} keys matching pattern: ${pattern}`);
+      }
+      return keys.length;
+    } catch (error) {
+      logger.error('Clear pattern error:', error);
+      return 0;
     }
   }
 

@@ -32,7 +32,17 @@ const logger = winston.createLogger({
         winston.format.printf(({ timestamp, level, message, ...meta }) => {
           let log = `${timestamp} [${level}]: ${message}`;
           if (Object.keys(meta).length > 0) {
-            log += ` ${JSON.stringify(meta)}`;
+            try {
+              // 순환 참조를 방지하기 위해 안전한 JSON 직렬화 사용
+              log += ` ${JSON.stringify(meta, (key, value) => {
+                if (key === 'req' || key === 'res' || key === 'socket' || key === 'connection') {
+                  return '[Circular]';
+                }
+                return value;
+              })}`;
+            } catch (error) {
+              log += ` [Circular Reference Error]`;
+            }
           }
           return log;
         })

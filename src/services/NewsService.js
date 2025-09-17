@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { Sentiment } = require('sentiment');
+const Sentiment = require('sentiment');
 const logger = require('../utils/logger');
 const CacheService = require('./CacheService');
 

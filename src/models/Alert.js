@@ -30,6 +30,11 @@ const alertSchema = new mongoose.Schema({
     max: 100,
     index: true
   },
+  isActive: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
   isTriggered: { 
     type: Boolean, 
     default: false,
@@ -107,15 +112,13 @@ const alertSchema = new mongoose.Schema({
 // 인덱스 설정
 alertSchema.index({ coinId: 1, isTriggered: 1 });
 alertSchema.index({ userId: 1, isTriggered: 1 });
+alertSchema.index({ userId: 1, isActive: 1 });
 alertSchema.index({ alertType: 1, isTriggered: 1 });
 alertSchema.index({ triggeredAt: -1 });
 alertSchema.index({ createdAt: -1 });
 alertSchema.index({ 'settings.cooldownMinutes': 1 });
 
 // 가상 필드
-alertSchema.virtual('isActive').get(function() {
-  return !this.isTriggered || this.canTriggerAgain();
-});
 
 alertSchema.virtual('timeSinceLastTrigger').get(function() {
   if (!this.metadata.lastTriggered) return null;

@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const Coin = require('../models/Coin');
 const Signal = require('../models/Signal');
 const CacheService = require('../services/CacheService');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 const cacheService = new CacheService();
 
@@ -143,116 +144,6 @@ router.get('/', [
     res.status(500).json({
       success: false,
       error: '코인 목록을 가져오는데 실패했습니다'
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/coins/{coinId}:
- *   get:
- *     summary: 특정 코인 상세 정보 조회
- *     description: 코인 ID로 특정 코인의 상세 정보와 최신 신호를 반환합니다.
- *     tags: [Coins]
- *     parameters:
- *       - in: path
- *         name: coinId
- *         required: true
- *         schema:
- *           type: string
- *         description: 코인 ID
- *       - in: query
- *         name: includeSignal
- *         schema:
- *           type: boolean
- *           default: true
- *         description: 최신 신호 포함 여부
- *     responses:
- *       200:
- *         description: 코인 상세 정보 조회 성공
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   allOf:
- *                     - $ref: '#/components/schemas/Coin'
- *                     - type: object
- *                       properties:
- *                         signal:
- *                           $ref: '#/components/schemas/Signal'
- *       404:
- *         description: 코인을 찾을 수 없음
- *       500:
- *         description: 서버 오류
- */
-router.get('/:coinId', [
-  param('coinId').notEmpty().withMessage('코인 ID는 필수입니다'),
-  query('includeSignal').optional().isBoolean().withMessage('includeSignal은 boolean 값이어야 합니다')
-], async (req, res) => {
-  try {
-    // 유효성 검사
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        error: '잘못된 요청입니다',
-        details: errors.array()
-      });
-    }
-
-    const { coinId } = req.params;
-    const includeSignal = req.query.includeSignal !== 'false';
-
-    // 캐시 확인
-    const cacheKey = `coin:${coinId}:${includeSignal}`;
-    let cachedResult = await cacheService.get(cacheKey);
-
-    if (cachedResult) {
-      logger.info(`Coin details for ${coinId} loaded from cache`);
-      return res.json(cachedResult);
-    }
-
-    // 코인 정보 조회
-    const coin = await Coin.findByCoinId(coinId);
-    if (!coin) {
-      return res.status(404).json({
-        success: false,
-        error: '코인을 찾을 수 없습니다'
-      });
-    }
-
-    const result = {
-      success: true,
-      data: coin.toObject()
-    };
-
-    // 신호 정보 포함
-    if (includeSignal) {
-      try {
-        const signal = await Signal.findByCoinId(coinId);
-        if (signal) {
-          result.data.signal = signal.toObject();
-        }
-      } catch (error) {
-        logger.warning(`Failed to fetch signal for ${coinId}:`, error);
-      }
-    }
-
-    // 캐시에 저장 (10분)
-    await cacheService.set(cacheKey, result, 600);
-
-    logger.success(`Retrieved coin details for ${coinId}`);
-    res.json(result);
-  } catch (error) {
-    logger.error(`Failed to retrieve coin details for ${req.params.coinId}:`, error);
-    res.status(500).json({
-      success: false,
-      error: '코인 상세 정보를 가져오는데 실패했습니다'
     });
   }
 });
@@ -529,6 +420,446 @@ router.get('/trending', [
     res.status(500).json({
       success: false,
       error: '트렌딩 코인을 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/coins/{coinId}/signals:
+ *   get:
+ *     summary: 특정 코인의 신호 목록 조회
+ *     description: 특정 코인의 신호 목록을 조회합니다.
+ *     tags: [Coins]
+ *     parameters:
+ *       - in: path
+ *         name: coinId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 코인 ID
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [1h, 4h, 24h, 7d, 30d]
+ *         description: 시간 프레임 필터
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: 반환할 신호 수
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: 페이지 번호
+ *     responses:
+ *       200:
+ *         description: 신호 목록 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Signal'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       404:
+ *         description: 코인을 찾을 수 없음
+ *       500:
+ *         description: 서버 오류
+ */
+router.get('/:coinId/signals', [
+  param('coinId').notEmpty().withMessage('코인 ID는 필수입니다'),
+  query('timeframe').optional().isIn(['1h', '4h', '24h', '7d', '30d']).withMessage('유효하지 않은 시간 프레임입니다'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('제한은 1-100 사이의 정수여야 합니다'),
+  query('page').optional().isInt({ min: 1 }).withMessage('페이지는 1 이상의 정수여야 합니다')
+], async (req, res) => {
+  try {
+    // 유효성 검사
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: '잘못된 요청입니다',
+        details: errors.array()
+      });
+    }
+
+    const { coinId } = req.params;
+    const timeframe = req.query.timeframe;
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+
+    // 코인 존재 확인
+    const coin = await Coin.findByCoinId(coinId);
+    if (!coin) {
+      return res.status(404).json({
+        success: false,
+        error: '코인을 찾을 수 없습니다'
+      });
+    }
+
+    // 캐시 키 생성
+    const cacheKey = `coin:${coinId}:signals:${timeframe || 'all'}:${page}:${limit}`;
+    let cachedResult = await cacheService.get(cacheKey);
+
+    if (cachedResult) {
+      logger.info(`Signals for ${coinId} loaded from cache`);
+      return res.json(cachedResult);
+    }
+
+    // 신호 조회 쿼리 구성
+    const query = { coinId };
+    if (timeframe) {
+      query.timeframe = timeframe;
+    }
+
+    // 페이지네이션
+    const skip = (page - 1) * limit;
+
+    // 신호 조회
+    const [signals, total] = await Promise.all([
+      Signal.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Signal.countDocuments(query)
+    ]);
+
+    const result = {
+      success: true,
+      data: signals,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+
+    // 캐시에 저장 (5분)
+    await cacheService.set(cacheKey, result, 300);
+
+    logger.success(`Retrieved ${signals.length} signals for ${coinId}`);
+    res.json(result);
+  } catch (error) {
+    logger.error(`Failed to retrieve signals for ${req.params.coinId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: '신호 목록을 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/coins/{coinId}:
+ *   get:
+ *     summary: 특정 코인 상세 정보 조회
+ *     description: 코인 ID로 특정 코인의 상세 정보와 최신 신호를 반환합니다.
+ *     tags: [Coins]
+ *     parameters:
+ *       - in: path
+ *         name: coinId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: 코인 ID
+ *       - in: query
+ *         name: includeSignal
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: 최신 신호 포함 여부
+ *     responses:
+ *       200:
+ *         description: 코인 상세 정보 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/Coin'
+ *                     - type: object
+ *                       properties:
+ *                         signal:
+ *                           $ref: '#/components/schemas/Signal'
+ *       404:
+ *         description: 코인을 찾을 수 없음
+ *       500:
+ *         description: 서버 오류
+ */
+router.get('/:coinId', [
+  param('coinId').notEmpty().withMessage('코인 ID는 필수입니다'),
+  query('includeSignal').optional().isBoolean().withMessage('includeSignal은 boolean 값이어야 합니다')
+], async (req, res) => {
+  try {
+    // 유효성 검사
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: '잘못된 요청입니다',
+        details: errors.array()
+      });
+    }
+
+    const { coinId } = req.params;
+    const includeSignal = req.query.includeSignal !== 'false';
+
+    // 캐시 확인
+    const cacheKey = `coin:${coinId}:${includeSignal}`;
+    let cachedResult = await cacheService.get(cacheKey);
+
+    if (cachedResult) {
+      logger.info(`Coin details for ${coinId} loaded from cache`);
+      return res.json(cachedResult);
+    }
+
+    // 코인 정보 조회
+    const coin = await Coin.findByCoinId(coinId);
+    if (!coin) {
+      return res.status(404).json({
+        success: false,
+        error: '코인을 찾을 수 없습니다'
+      });
+    }
+
+    const result = {
+      success: true,
+      data: coin.toObject()
+    };
+
+    // 신호 정보 포함
+    if (includeSignal) {
+      try {
+        const signal = await Signal.findByCoinId(coinId);
+        if (signal) {
+          result.data.signal = signal.toObject();
+        }
+      } catch (error) {
+        logger.warning(`Failed to fetch signal for ${coinId}:`, error);
+      }
+    }
+
+    // 캐시에 저장 (10분)
+    await cacheService.set(cacheKey, result, 600);
+
+    logger.success(`Retrieved coin details for ${coinId}`);
+    res.json(result);
+  } catch (error) {
+    logger.error(`Failed to retrieve coin details for ${req.params.coinId}:`, error);
+    res.status(500).json({
+      success: false,
+      error: '코인 상세 정보를 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/coins/refresh:
+ *   post:
+ *     summary: 코인 데이터 새로고침
+ *     description: CoinGecko API에서 최신 코인 데이터를 가져와서 데이터베이스에 저장합니다.
+ *     tags: [Coins]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: 새로고침할 코인 수
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [high, medium, low]
+ *           default: medium
+ *         description: "우선순위 (high: 상위 100개, medium: 상위 500개, low: 전체)"
+ *     responses:
+ *       200:
+ *         description: 코인 데이터 새로고침 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "코인 데이터가 성공적으로 새로고침되었습니다"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalCoins:
+ *                       type: integer
+ *                       description: 새로고침된 코인 수
+ *                     processingTime:
+ *                       type: number
+ *                       description: 처리 시간 (ms)
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: 잘못된 요청
+ *       500:
+ *         description: 서버 오류
+ */
+router.post('/refresh', [
+  query('limit').optional().isInt({ min: 1, max: 1000 }).withMessage('제한은 1-1000 사이의 정수여야 합니다'),
+  query('priority').optional().isIn(['high', 'medium', 'low']).withMessage('우선순위는 high, medium, low 중 하나여야 합니다')
+], async (req, res) => {
+  try {
+    // 유효성 검사
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: '잘못된 요청입니다',
+        details: errors.array()
+      });
+    }
+
+    const limit = parseInt(req.query.limit) || 100;
+    const priority = req.query.priority || 'medium';
+    const startTime = Date.now();
+
+    logger.info(`Starting coin data refresh - Priority: ${priority}, Limit: ${limit}`);
+
+    // CoinGecko 서비스 초기화
+    const CoinGeckoService = require('../services/CoinGeckoService');
+    const coinGeckoService = new CoinGeckoService();
+
+    let totalCoins = 0;
+    let processedCoins = 0;
+
+    try {
+      // 우선순위에 따른 코인 수집
+      switch (priority) {
+        case 'high':
+          // 상위 100개 코인
+          const highPriorityCoins = await coinGeckoService.getMarketDataBatch(1, Math.min(limit, 100));
+          totalCoins = highPriorityCoins.length;
+          
+          for (const coinData of highPriorityCoins) {
+            try {
+              await Coin.updateOrCreate(coinData);
+              processedCoins++;
+            } catch (error) {
+              logger.warning(`Failed to save coin ${coinData.id}:`, error.message);
+            }
+          }
+          break;
+
+        case 'medium':
+          // 상위 500개 코인
+          const mediumPriorityCoins = await coinGeckoService.getMarketDataBatch(1, Math.min(limit, 500));
+          totalCoins = mediumPriorityCoins.length;
+          
+          for (const coinData of mediumPriorityCoins) {
+            try {
+              await Coin.updateOrCreate(coinData);
+              processedCoins++;
+            } catch (error) {
+              logger.warning(`Failed to save coin ${coinData.id}:`, error.message);
+            }
+          }
+          break;
+
+        case 'low':
+          // 전체 코인 (여러 페이지로 나누어 처리)
+          const pages = Math.ceil(limit / 250);
+          for (let page = 1; page <= pages; page++) {
+            const pageLimit = Math.min(250, limit - (page - 1) * 250);
+            const pageCoins = await coinGeckoService.getMarketDataBatch(page, pageLimit);
+            
+            for (const coinData of pageCoins) {
+              try {
+                await Coin.updateOrCreate(coinData);
+                processedCoins++;
+              } catch (error) {
+                logger.warning(`Failed to save coin ${coinData.id}:`, error.message);
+              }
+            }
+            
+            totalCoins += pageCoins.length;
+            
+            // API 제한을 위한 대기
+            if (page < pages) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+          break;
+
+        default:
+          throw new Error(`Invalid priority: ${priority}`);
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      // 캐시 정리
+      await cacheService.clearPattern('coins:*');
+
+      logger.success(`Coin data refresh completed - Processed: ${processedCoins}/${totalCoins} coins in ${processingTime}ms`);
+
+      res.json({
+        success: true,
+        message: '코인 데이터가 성공적으로 새로고침되었습니다',
+        data: {
+          totalCoins,
+          processedCoins,
+          processingTime,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      logger.error('Failed to refresh coin data:', error);
+      res.status(500).json({
+        success: false,
+        error: '코인 데이터 새로고침에 실패했습니다',
+        details: error.message
+      });
+    }
+
+  } catch (error) {
+    logger.error('Coin refresh endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: '서버 오류가 발생했습니다'
     });
   }
 });

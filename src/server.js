@@ -3,6 +3,7 @@ const DatabaseConfig = require('../config/database');
 const RedisConfig = require('../config/redis');
 const logger = require('./utils/logger');
 const SchedulerService = require('./services/SchedulerService');
+const { processErrorHandler } = require('./middleware/errorHandler');
 
 const PORT = process.env.PORT || 3000;
 
@@ -10,31 +11,26 @@ const PORT = process.env.PORT || 3000;
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
-// Unhandled promise rejection handler
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
-
-// Uncaught exception handler
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  process.exit(1);
-});
 
 async function startServer() {
   try {
     logger.info('🚀 GainDeuk Backend 서버 시작 중...');
+
+    // 프로세스 에러 핸들러 초기화
+    processErrorHandler();
 
     // Database connections
     await DatabaseConfig.connect();
     global.redis = RedisConfig.createConnection();
 
     // Start scheduler if enabled
+    logger.info(`SCHEDULER_ENABLED: ${process.env.SCHEDULER_ENABLED}`);
     if (process.env.SCHEDULER_ENABLED === 'true') {
       global.scheduler = new SchedulerService();
       global.scheduler.startScheduler();
       logger.info('📅 스케줄러가 시작되었습니다');
+    } else {
+      logger.info('📅 스케줄러가 비활성화되어 있습니다');
     }
 
     // Start server

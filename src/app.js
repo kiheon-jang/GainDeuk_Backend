@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { requestLogger } = require('./middleware/logging');
 const { performanceMonitor } = require('./middleware/monitoring');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
@@ -76,17 +77,10 @@ app.use('*', (req, res) => {
   });
 });
 
+// 404 handler
+app.use(notFoundHandler);
+
 // Global error handler
-app.use((err, req, res, next) => {
-  console.error('Global error handler:', err);
-  
-  res.status(err.status || 500).json({
-    success: false,
-    error: process.env.NODE_ENV === 'production' 
-      ? '서버 내부 오류가 발생했습니다' 
-      : err.message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
-  });
-});
+app.use(errorHandler);
 
 module.exports = app;

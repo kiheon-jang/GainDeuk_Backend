@@ -149,6 +149,18 @@ router.get('/', async (req, res) => {
       health.errors.push('External API services failed');
     }
 
+    // 스케줄러 상태 확인
+    try {
+      health.services.scheduler = {
+        enabled: process.env.SCHEDULER_ENABLED === 'true',
+        running: global.scheduler ? global.scheduler.isRunning : false,
+        jobs: global.scheduler ? global.scheduler.jobs.size : 0
+      };
+    } catch (error) {
+      health.services.scheduler = { enabled: false, running: false, jobs: 0 };
+      health.errors.push('Scheduler status check failed');
+    }
+
     // 성능 메트릭
     try {
       health.performance = performanceMonitor.getMetrics();

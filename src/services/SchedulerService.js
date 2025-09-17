@@ -4,12 +4,14 @@ const logger = require('../utils/logger');
 const CoinGeckoService = require('./CoinGeckoService');
 const SignalCalculatorService = require('./SignalCalculatorService');
 const CacheService = require('./CacheService');
+const AlertService = require('./AlertService');
 
 class SchedulerService {
   constructor() {
     this.coinGeckoService = new CoinGeckoService();
     this.signalCalculator = new SignalCalculatorService();
     this.cacheService = new CacheService();
+    this.alertService = new AlertService();
     
     // Redis 연결 설정
     this.redisConnection = {
@@ -89,7 +91,11 @@ class SchedulerService {
     try {
       // 모든 작업 중지
       this.jobs.forEach((job, name) => {
-        job.destroy();
+        if (job.stop) {
+          job.stop();
+        } else if (job.destroy) {
+          job.destroy();
+        }
         logger.info(`Stopped job: ${name}`);
       });
 
@@ -319,39 +325,14 @@ class SchedulerService {
   // 알림 처리 작업
   async processAlertJob(signal) {
     try {
-      const Alert = require('../models/Alert');
+      // AlertService를 사용하여 알림 처리
+      const result = await this.alertService.processSignalAlert(signal);
       
-      // 기존 알림 확인
-      const existingAlert = await Alert.findOne({
-        coinId: signal.coinId,
-        alertType: 'STRONG_SIGNAL',
-        isTriggered: false
-      });
-
-      if (existingAlert) {
-        // 기존 알림 트리거
-        await existingAlert.trigger({
-          score: signal.finalScore,
-          message: `${signal.symbol} 강한 신호 감지: ${signal.finalScore}점 (${signal.recommendation.action})`,
-          data: signal
-        });
-      } else {
-        // 새 알림 생성
-        const alert = await Alert.createStrongSignalAlert(
-          signal.coinId,
-          signal.symbol,
-          signal.finalScore
-        );
-        
-        await alert.trigger({
-          score: signal.finalScore,
-          message: `${signal.symbol} 강한 신호 감지: ${signal.finalScore}점 (${signal.recommendation.action})`,
-          data: signal
-        });
+      if (result.sent > 0) {
+        logger.success(`Alert sent for ${signal.symbol}: ${result.sent}/${result.processed} alerts`);
       }
-
-      logger.success(`Alert processed for ${signal.symbol}: ${signal.finalScore}점`);
-      return true;
+      
+      return { success: true, signal, alerts: result };
     } catch (error) {
       logger.error(`Failed to process alert job for ${signal.symbol}:`, error);
       throw error;

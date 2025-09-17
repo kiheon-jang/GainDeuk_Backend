@@ -229,6 +229,14 @@ router.get('/', [
  *       500:
  *         description: 서버 오류
  */
+// 빈 coinId 처리
+router.get('/coin/', (req, res) => {
+  return res.status(400).json({
+    success: false,
+    error: '코인 ID는 필수입니다'
+  });
+});
+
 router.get('/coin/:coinId', [
   param('coinId').notEmpty().withMessage('코인 ID는 필수입니다')
 ], async (req, res) => {
@@ -544,6 +552,197 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       error: '신호 통계를 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/signals/refresh:
+ *   post:
+ *     summary: 신호 데이터 새로고침
+ *     description: 모든 코인에 대해 신호를 재계산하고 데이터베이스에 저장합니다.
+ *     tags: [Signals]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: 새로고침할 코인 수
+ *       - in: query
+ *         name: timeframe
+ *         schema:
+ *           type: string
+ *           enum: [1h, 4h, 24h, 7d]
+ *           default: 24h
+ *         description: 신호 계산 시간대
+ *     responses:
+ *       200:
+ *         description: 신호 데이터 새로고침 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "신호 데이터가 성공적으로 새로고침되었습니다"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalSignals:
+ *                       type: integer
+ *                       description: 새로고침된 신호 수
+ *                     processingTime:
+ *                       type: number
+ *                       description: 처리 시간 (ms)
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: 잘못된 요청
+ *       500:
+ *         description: 서버 오류
+ */
+router.post('/refresh', [
+  query('limit').optional().isInt({ min: 1, max: 1000 }).withMessage('제한은 1-1000 사이의 정수여야 합니다'),
+  query('timeframe').optional().isIn(['1h', '4h', '24h', '7d']).withMessage('시간대는 1h, 4h, 24h, 7d 중 하나여야 합니다')
+], async (req, res) => {
+  try {
+    // 유효성 검사
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: '잘못된 요청입니다',
+        details: errors.array()
+      });
+    }
+
+    const limit = parseInt(req.query.limit) || 100;
+    const timeframe = req.query.timeframe || '24h';
+    const startTime = Date.now();
+
+    logger.info(`Starting signal data refresh - Timeframe: ${timeframe}, Limit: ${limit}`);
+
+    // 서비스 초기화
+    const SignalCalculatorService = require('../services/SignalCalculatorService');
+    const signalCalculatorService = new SignalCalculatorService();
+
+    // 코인 목록 가져오기
+    const Coin = require('../models/Coin');
+    const coins = await Coin.find({})
+      .sort({ marketCapRank: 1 })
+      .limit(limit)
+      .select('coinId name symbol currentPrice marketCap totalVolume priceChange lastUpdated');
+
+    if (coins.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: '새로고침할 코인이 없습니다. 먼저 코인 데이터를 새로고침해주세요.'
+      });
+    }
+
+    let processedSignals = 0;
+    let totalSignals = 0;
+
+    try {
+      // 각 코인에 대해 신호 계산
+      for (const coin of coins) {
+        try {
+          // 신호 계산
+          const signalData = await signalCalculatorService.calculateSignal(
+            coin.coinId, 
+            coin.symbol, 
+            coin.name, 
+            {
+              current_price: coin.currentPrice,
+              market_cap: coin.marketCap,
+              market_cap_rank: coin.marketCapRank,
+              total_volume: coin.totalVolume,
+              price_change_percentage_1h: coin.priceChange['1h'] || 0,
+              price_change_percentage_24h: coin.priceChange['24h'] || 0,
+              price_change_percentage_7d: coin.priceChange['7d'] || 0,
+              price_change_percentage_30d: coin.priceChange['30d'] || 0,
+              total_volume_change_24h: 0 // 이 데이터는 현재 없음
+            }
+          );
+          
+          if (signalData && signalData.recommendation) {
+            // 기존 신호 삭제 (같은 코인, 같은 시간대)
+            await Signal.deleteMany({
+              coinId: coin.coinId,
+              timeframe: timeframe
+            });
+
+            // 새 신호 생성
+            const signal = new Signal({
+              coinId: coin.coinId,
+              symbol: coin.symbol,
+              name: coin.name,
+              finalScore: signalData.finalScore,
+              breakdown: signalData.breakdown,
+              recommendation: signalData.recommendation,
+              timeframe: signalData.timeframe,
+              priority: signalData.priority,
+              rank: signalData.rank || 1, // 최소값 1로 설정
+              currentPrice: coin.currentPrice,
+              marketCap: coin.marketCap,
+              metadata: signalData.metadata
+            });
+
+            await signal.save();
+            processedSignals++;
+          }
+          
+          totalSignals++;
+          
+        } catch (error) {
+          logger.warning(`Failed to calculate signal for ${coin.symbol}:`, error.message);
+          console.error('Signal calculation error details:', error);
+          totalSignals++;
+        }
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      // 캐시 정리
+      await cacheService.clearPattern('signals:*');
+
+      logger.success(`Signal data refresh completed - Processed: ${processedSignals}/${totalSignals} signals in ${processingTime}ms`);
+
+      res.json({
+        success: true,
+        message: '신호 데이터가 성공적으로 새로고침되었습니다',
+        data: {
+          totalSignals: processedSignals,
+          totalCoins: totalSignals,
+          processingTime,
+          timeframe,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      logger.error('Failed to refresh signal data:', error);
+      res.status(500).json({
+        success: false,
+        error: '신호 데이터 새로고침에 실패했습니다',
+        details: error.message
+      });
+    }
+
+  } catch (error) {
+    logger.error('Signal refresh endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: '서버 오류가 발생했습니다'
     });
   }
 });

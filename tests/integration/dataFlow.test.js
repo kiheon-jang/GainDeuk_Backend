@@ -7,13 +7,16 @@ const WhaleService = require('../../src/services/WhaleService');
 const Coin = require('../../src/models/Coin');
 const Signal = require('../../src/models/Signal');
 
+// 테스트 설정 파일 import
+require('../setup');
+
 describe('Data Flow Integration Tests', () => {
   let coinGeckoService;
   let signalCalculator;
   let newsService;
   let whaleService;
 
-  before(async () => {
+  beforeAll(async () => {
     // 서비스 인스턴스 생성
     coinGeckoService = new CoinGeckoService();
     signalCalculator = new SignalCalculatorService();
@@ -254,7 +257,7 @@ describe('Data Flow Integration Tests', () => {
     });
   });
 
-  after(async () => {
+  afterAll(async () => {
     // 테스트 데이터 정리
     await Coin.deleteMany({ coinId: { $in: ['test-coin', 'test-coin-1', 'test-coin-2'] } });
     await Signal.deleteMany({ coinId: { $in: ['test-coin', 'test-coin-1', 'test-coin-2'] } });

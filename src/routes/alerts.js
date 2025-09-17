@@ -155,6 +155,159 @@ router.post('/', [
 
 /**
  * @swagger
+ * /api/alerts:
+ *   get:
+ *     summary: 알림 목록 조회
+ *     description: 사용자의 알림 목록을 조회합니다.
+ *     tags: [Alerts]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: 페이지 번호
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: 페이지당 항목 수
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         description: 사용자 ID 필터
+ *       - in: query
+ *         name: alertType
+ *         schema:
+ *           type: string
+ *           enum: [STRONG_SIGNAL, PRICE_TARGET, VOLUME_SPIKE, WHALE_MOVE, CUSTOM]
+ *         description: 알림 타입 필터
+ *       - in: query
+ *         name: coinId
+ *         schema:
+ *           type: string
+ *         description: 코인 ID 필터
+ *       - in: query
+ *         name: isActive
+ *         schema:
+ *           type: boolean
+ *         description: 활성 상태 필터
+ *     responses:
+ *       200:
+ *         description: 알림 목록 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Alert'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *       400:
+ *         description: 잘못된 요청
+ *       500:
+ *         description: 서버 오류
+ */
+router.get('/', [
+  query('page').optional().isInt({ min: 1 }).withMessage('페이지는 1 이상의 정수여야 합니다'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('제한은 1-100 사이의 정수여야 합니다'),
+  query('userId').optional().isString().withMessage('사용자 ID는 문자열이어야 합니다'),
+  query('alertType').optional().isIn(['STRONG_SIGNAL', 'PRICE_TARGET', 'VOLUME_SPIKE', 'WHALE_MOVE', 'CUSTOM']).withMessage('유효하지 않은 알림 타입입니다'),
+  query('coinId').optional().isString().withMessage('코인 ID는 문자열이어야 합니다'),
+  query('isActive').optional().isBoolean().withMessage('활성 상태는 boolean 값이어야 합니다')
+], async (req, res) => {
+  try {
+    // 유효성 검사
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: '잘못된 요청입니다',
+        details: errors.array()
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const userId = req.query.userId;
+    const alertType = req.query.alertType;
+    const coinId = req.query.coinId;
+    const isActive = req.query.isActive;
+
+    // 쿼리 조건 구성
+    const query = {};
+    
+    if (userId) {
+      query.userId = userId;
+    }
+    
+    if (alertType) {
+      query.alertType = alertType;
+    }
+
+    if (coinId) {
+      query.coinId = coinId;
+    }
+
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
+
+    // 데이터베이스 쿼리
+    const skip = (page - 1) * limit;
+    const [alerts, total] = await Promise.all([
+      Alert.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Alert.countDocuments(query)
+    ]);
+
+    const result = {
+      success: true,
+      data: alerts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+
+    logger.success(`Retrieved ${alerts.length} alerts (page ${page})`);
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to retrieve alerts:', error);
+    res.status(500).json({
+      success: false,
+      error: '알림 목록을 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/alerts/triggered:
  *   get:
  *     summary: 트리거된 알림 조회
@@ -286,6 +439,73 @@ router.get('/triggered', [
 
 /**
  * @swagger
+ * /api/alerts/stats:
+ *   get:
+ *     summary: 알림 통계
+ *     description: 알림 관련 통계 정보를 반환합니다.
+ *     tags: [Alerts]
+ *     responses:
+ *       200:
+ *         description: 통계 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalAlerts:
+ *                       type: integer
+ *                     activeAlerts:
+ *                       type: integer
+ *                     triggeredAlerts:
+ *                       type: integer
+ *                     strongSignalAlerts:
+ *                       type: integer
+ *                     priceTargetAlerts:
+ *                       type: integer
+ *                     volumeSpikeAlerts:
+ *                       type: integer
+ *                     whaleMoveAlerts:
+ *                       type: integer
+ *       500:
+ *         description: 서버 오류
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    // 통계 조회
+    const stats = await Alert.getAlertStats();
+
+    const result = {
+      success: true,
+      data: stats[0] || {
+        totalAlerts: 0,
+        activeAlerts: 0,
+        triggeredAlerts: 0,
+        strongSignalAlerts: 0,
+        priceTargetAlerts: 0,
+        volumeSpikeAlerts: 0,
+        whaleMoveAlerts: 0
+      }
+    };
+
+    logger.success('Retrieved alert statistics');
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to retrieve alert stats:', error);
+    res.status(500).json({
+      success: false,
+      error: '알림 통계를 가져오는데 실패했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/alerts/{alertId}:
  *   get:
  *     summary: 특정 알림 조회
@@ -376,6 +596,9 @@ router.get('/:alertId', [
  *           schema:
  *             type: object
  *             properties:
+ *               isActive:
+ *                 type: boolean
+ *                 description: 알림 활성 상태
  *               settings:
  *                 type: object
  *                 properties:
@@ -441,7 +664,7 @@ router.put('/:alertId', [
     }
 
     const { alertId } = req.params;
-    const { settings } = req.body;
+    const { settings, isActive } = req.body;
 
     // 알림 조회
     const alert = await Alert.findById(alertId);
@@ -455,6 +678,12 @@ router.put('/:alertId', [
     // 설정 업데이트
     if (settings) {
       await alert.updateSettings(settings);
+    }
+
+    // 활성 상태 업데이트
+    if (isActive !== undefined) {
+      alert.isActive = isActive;
+      await alert.save();
     }
 
     logger.success(`Alert ${alertId} updated`);
@@ -543,71 +772,5 @@ router.delete('/:alertId', [
   }
 });
 
-/**
- * @swagger
- * /api/alerts/stats:
- *   get:
- *     summary: 알림 통계
- *     description: 알림 관련 통계 정보를 반환합니다.
- *     tags: [Alerts]
- *     responses:
- *       200:
- *         description: 통계 조회 성공
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     totalAlerts:
- *                       type: integer
- *                     activeAlerts:
- *                       type: integer
- *                     triggeredAlerts:
- *                       type: integer
- *                     strongSignalAlerts:
- *                       type: integer
- *                     priceTargetAlerts:
- *                       type: integer
- *                     volumeSpikeAlerts:
- *                       type: integer
- *                     whaleMoveAlerts:
- *                       type: integer
- *       500:
- *         description: 서버 오류
- */
-router.get('/stats', async (req, res) => {
-  try {
-    // 통계 조회
-    const stats = await Alert.getAlertStats();
-
-    const result = {
-      success: true,
-      data: stats[0] || {
-        totalAlerts: 0,
-        activeAlerts: 0,
-        triggeredAlerts: 0,
-        strongSignalAlerts: 0,
-        priceTargetAlerts: 0,
-        volumeSpikeAlerts: 0,
-        whaleMoveAlerts: 0
-      }
-    };
-
-    logger.success('Retrieved alert statistics');
-    res.json(result);
-  } catch (error) {
-    logger.error('Failed to retrieve alert stats:', error);
-    res.status(500).json({
-      success: false,
-      error: '알림 통계를 가져오는데 실패했습니다'
-    });
-  }
-});
 
 module.exports = router;
