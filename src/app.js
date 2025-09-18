@@ -70,6 +70,7 @@ app.use('/api/signal-persistence', require('./routes/signalPersistence'));
 app.use('/api/investment-strategy', require('./routes/investmentStrategy'));
 app.use('/api/real-time-optimization', require('./routes/realTimeOptimization'));
 app.use('/api/data-quality', require('./routes/dataQuality'));
+app.use('/api/performance-monitoring', require('./routes/performanceMonitoring'));
 
 // Swagger documentation
 if (process.env.NODE_ENV !== 'production') {
