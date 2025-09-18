@@ -3,7 +3,7 @@ const { logger } = require('../utils/logger');
 
 /**
  * 소셜미디어 모니터링 서비스
- * Twitter/X, 텔레그램, 디스코드 등 소셜미디어 플랫폼에서 암호화폐 관련 정보를 실시간으로 모니터링
+ * Twitter/X, 텔레그램 등 소셜미디어 플랫폼에서 암호화폐 관련 정보를 실시간으로 모니터링
  */
 class SocialMediaService {
   constructor() {
@@ -24,11 +24,6 @@ class SocialMediaService {
         baseUrl: 'https://api.telegram.org/bot',
         botToken: process.env.TELEGRAM_BOT_TOKEN,
         rateLimit: 30, // 1초당 30 요청
-        lastRequest: 0
-      },
-      discord: {
-        webhookUrl: process.env.DISCORD_WEBHOOK_URL,
-        rateLimit: 5, // 1초당 5 요청
         lastRequest: 0
       }
     };
@@ -55,10 +50,6 @@ class SocialMediaService {
       telegram: [
         '@cryptocurrency', '@bitcoin', '@ethereum', '@defi',
         '@cryptonews', '@trading_signals'
-      ],
-      discord: [
-        'crypto-trading', 'bitcoin-discussion', 'altcoin-chat',
-        'defi-discussion', 'nft-marketplace'
       ]
     };
   }
@@ -124,8 +115,7 @@ class SocialMediaService {
 
     const promises = [
       this.collectTwitterData(),
-      this.collectTelegramData(),
-      this.collectDiscordData()
+      this.collectTelegramData()
     ];
 
     await Promise.allSettled(promises);
@@ -139,15 +129,14 @@ class SocialMediaService {
 
     const promises = [
       this.collectTwitterData(),
-      this.collectTelegramData(),
-      this.collectDiscordData()
+      this.collectTelegramData()
     ];
 
     const results = await Promise.allSettled(promises);
     
     // 결과 처리
     results.forEach((result, index) => {
-      const platforms = ['twitter', 'telegram', 'discord'];
+      const platforms = ['twitter', 'telegram'];
       if (result.status === 'rejected') {
         logger.error(`${platforms[index]} 데이터 수집 실패:`, result.reason);
       }
@@ -326,63 +315,6 @@ class SocialMediaService {
     return response.data.result || [];
   }
 
-  /**
-   * 디스코드 데이터 수집
-   */
-  async collectDiscordData() {
-    if (!this.apiConfig.discord.webhookUrl) {
-      logger.warn('Discord Webhook URL이 설정되지 않았습니다.');
-      return;
-    }
-
-    try {
-      // Rate limiting 체크
-      if (!this.checkRateLimit('discord')) {
-        logger.warn('Discord API Rate limit에 도달했습니다.');
-        return;
-      }
-
-      // Discord는 웹훅을 통한 수집이므로 시뮬레이션
-      const messages = await this.simulateDiscordData();
-
-      // 데이터 처리 및 저장
-      const processedMessages = this.processDiscordData(messages);
-      this.socialData.set('discord', {
-        data: processedMessages,
-        timestamp: new Date(),
-        count: processedMessages.length
-      });
-
-      logger.info(`Discord 데이터 수집 완료: ${processedMessages.length}개 메시지`);
-
-    } catch (error) {
-      logger.error('Discord 데이터 수집 실패:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Discord 데이터 시뮬레이션 (실제 구현에서는 Discord API 사용)
-   */
-  async simulateDiscordData() {
-    // 실제 구현에서는 Discord API를 사용하여 메시지를 수집
-    return [
-      {
-        id: '1',
-        content: 'Bitcoin is looking bullish today!',
-        author: 'CryptoTrader#1234',
-        channel: 'crypto-trading',
-        timestamp: new Date().toISOString()
-      },
-      {
-        id: '2',
-        content: 'Ethereum 2.0 staking rewards are amazing',
-        author: 'DeFiEnthusiast#5678',
-        channel: 'defi-discussion',
-        timestamp: new Date().toISOString()
-      }
-    ];
-  }
 
   /**
    * Twitter 데이터 처리
@@ -422,22 +354,6 @@ class SocialMediaService {
     }));
   }
 
-  /**
-   * 디스코드 데이터 처리
-   */
-  processDiscordData(messages) {
-    return messages.map(message => ({
-      id: message.id,
-      text: message.content,
-      author: message.author,
-      platform: 'discord',
-      timestamp: message.timestamp,
-      channel: message.channel,
-      sentiment: this.analyzeSentiment(message.content),
-      relevance: this.calculateRelevance(message.content),
-      keywords: this.extractKeywords(message.content)
-    }));
-  }
 
   /**
    * 감정 분석 (간단한 키워드 기반)
