@@ -66,6 +66,9 @@ app.use('/api/user-profiles', require('./routes/userProfiles'));
 app.use('/api/personalization', require('./routes/personalization'));
 app.use('/api/social-media', require('./routes/socialMedia'));
 app.use('/api/onchain', require('./routes/onChain'));
+app.use('/api/signal-persistence', require('./routes/signalPersistence'));
+app.use('/api/investment-strategy', require('./routes/investmentStrategy'));
+app.use('/api/real-time-optimization', require('./routes/realTimeOptimization'));
 
 // Swagger documentation
 if (process.env.NODE_ENV !== 'production') {
