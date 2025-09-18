@@ -6,6 +6,78 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/signal-persistence:
+ *   get:
+ *     summary: 신호 지속성 분석 서비스 개요
+ *     description: 신호 지속성 예측 및 분석 서비스의 개요 정보와 사용 가능한 엔드포인트를 반환합니다.
+ *     tags: [Signal Persistence]
+ *     responses:
+ *       200:
+ *         description: 신호 지속성 서비스 개요 정보
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       example: "signal-persistence"
+ *                     description:
+ *                       type: string
+ *                       example: "신호 지속성 예측 및 분석 서비스"
+ *                     availableEndpoints:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["/predict", "/analyze", "/history", "/patterns", "/insights"]
+ *                     lastUpdate:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-09-18T07:37:48.372Z"
+ *                     status:
+ *                       type: string
+ *                       enum: ["active", "inactive", "maintenance"]
+ *                       example: "active"
+ */
+
+// 루트 엔드포인트 - 신호 지속성 서비스 개요
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        module: 'signal-persistence',
+        description: '신호 지속성 예측 및 분석 서비스',
+        availableEndpoints: [
+          '/predict',
+          '/analyze',
+          '/history',
+          '/patterns',
+          '/insights'
+        ],
+        lastUpdate: new Date().toISOString(),
+        status: 'active'
+      }
+    });
+
+  } catch (error) {
+    logger.error('신호 지속성 서비스 개요 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     SignalPersistencePrediction:

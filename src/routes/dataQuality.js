@@ -6,6 +6,78 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/data-quality:
+ *   get:
+ *     summary: 데이터 품질 관리 서비스 개요
+ *     description: 데이터 품질 검증 및 이상치 탐지 서비스의 개요 정보와 사용 가능한 엔드포인트를 반환합니다.
+ *     tags: [Data Quality]
+ *     responses:
+ *       200:
+ *         description: 데이터 품질 서비스 개요 정보
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       example: "data-quality"
+ *                     description:
+ *                       type: string
+ *                       example: "데이터 품질 검증 및 이상치 탐지 서비스"
+ *                     availableEndpoints:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["/validate", "/anomalies", "/health", "/metrics", "/reports"]
+ *                     lastUpdate:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-09-18T07:37:48.372Z"
+ *                     status:
+ *                       type: string
+ *                       enum: ["active", "inactive", "maintenance"]
+ *                       example: "active"
+ */
+
+// 루트 엔드포인트 - 데이터 품질 서비스 개요
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        module: 'data-quality',
+        description: '데이터 품질 검증 및 이상치 탐지 서비스',
+        availableEndpoints: [
+          '/validate',
+          '/anomalies',
+          '/health',
+          '/metrics',
+          '/reports'
+        ],
+        lastUpdate: new Date().toISOString(),
+        status: 'active'
+      }
+    });
+
+  } catch (error) {
+    logger.error('데이터 품질 서비스 개요 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     ValidationResult:

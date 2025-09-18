@@ -47,6 +47,48 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/social-media:
+ *   get:
+ *     summary: 소셜 미디어 분석 서비스 개요
+ *     description: 소셜 미디어 감정 분석 서비스의 개요 정보와 사용 가능한 엔드포인트를 반환합니다.
+ *     tags: [Social Media]
+ *     responses:
+ *       200:
+ *         description: 소셜 미디어 서비스 개요 정보
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       example: "social-media"
+ *                     description:
+ *                       type: string
+ *                       example: "소셜 미디어 감정 분석 서비스"
+ *                     availableEndpoints:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["/status", "/sentiment", "/trends", "/platforms", "/keywords"]
+ *                     lastUpdate:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-09-18T07:37:48.372Z"
+ *                     status:
+ *                       type: string
+ *                       enum: ["active", "inactive", "maintenance"]
+ *                       example: "active"
+ */
+
+/**
+ * @swagger
  * /api/social-media/status:
  *   get:
  *     summary: 소셜미디어 모니터링 상태 조회
@@ -78,6 +120,38 @@ const router = express.Router();
  *                       format: date-time
  *                       description: 마지막 업데이트 시간
  */
+// 루트 엔드포인트 - 소셜 미디어 서비스 개요
+router.get('/', async (req, res) => {
+  try {
+    const status = SocialMediaService.getStatus();
+    
+    res.json({
+      success: true,
+      data: {
+        module: 'social-media',
+        description: '소셜 미디어 감정 분석 서비스',
+        availableEndpoints: [
+          '/status',
+          '/sentiment',
+          '/trends',
+          '/platforms',
+          '/keywords'
+        ],
+        lastUpdate: new Date().toISOString(),
+        status: status.isRunning ? 'active' : 'inactive'
+      }
+    });
+
+  } catch (error) {
+    logger.error('소셜 미디어 서비스 개요 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다',
+      error: error.message
+    });
+  }
+});
+
 router.get('/status', async (req, res) => {
   try {
     const status = SocialMediaService.getStatus();

@@ -6,6 +6,78 @@ const router = express.Router();
 
 /**
  * @swagger
+ * /api/performance-monitoring:
+ *   get:
+ *     summary: 성능 모니터링 서비스 개요
+ *     description: 시스템 성능 모니터링 서비스의 개요 정보와 사용 가능한 엔드포인트를 반환합니다.
+ *     tags: [Performance Monitoring]
+ *     responses:
+ *       200:
+ *         description: 성능 모니터링 서비스 개요 정보
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       example: "performance-monitoring"
+ *                     description:
+ *                       type: string
+ *                       example: "시스템 성능 모니터링 서비스"
+ *                     availableEndpoints:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["/metrics", "/health", "/alerts", "/reports", "/dashboard"]
+ *                     lastUpdate:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-09-18T07:37:48.372Z"
+ *                     status:
+ *                       type: string
+ *                       enum: ["active", "inactive", "maintenance"]
+ *                       example: "active"
+ */
+
+// 루트 엔드포인트 - 성능 모니터링 서비스 개요
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        module: 'performance-monitoring',
+        description: '시스템 성능 모니터링 서비스',
+        availableEndpoints: [
+          '/metrics',
+          '/health',
+          '/alerts',
+          '/reports',
+          '/dashboard'
+        ],
+        lastUpdate: new Date().toISOString(),
+        status: 'active'
+      }
+    });
+
+  } catch (error) {
+    logger.error('성능 모니터링 서비스 개요 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     PerformanceMetrics:

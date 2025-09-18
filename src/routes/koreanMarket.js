@@ -23,6 +23,48 @@ const validateInput = (req, res, next) => {
 
 /**
  * @swagger
+ * /api/korean-market:
+ *   get:
+ *     summary: 한국 시장 데이터 서비스 개요
+ *     description: 한국 암호화폐 시장 분석 서비스의 개요 정보와 사용 가능한 엔드포인트를 반환합니다.
+ *     tags: [Korean Market]
+ *     responses:
+ *       200:
+ *         description: 한국 시장 서비스 개요 정보
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     module:
+ *                       type: string
+ *                       example: "korean-market"
+ *                     description:
+ *                       type: string
+ *                       example: "한국 암호화폐 시장 분석 서비스"
+ *                     availableEndpoints:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                       example: ["/stats", "/kimchi-premium/:symbol", "/signal/:symbol", "/community-sentiment/:symbol", "/health"]
+ *                     lastUpdate:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-09-18T07:37:48.372Z"
+ *                     status:
+ *                       type: string
+ *                       enum: ["active", "inactive", "maintenance"]
+ *                       example: "active"
+ */
+
+/**
+ * @swagger
  * /api/korean-market/kimchi-premium/{symbol}:
  *   get:
  *     summary: 특정 코인의 김치프리미엄 조회
@@ -64,6 +106,36 @@ const validateInput = (req, res, next) => {
  *       500:
  *         description: "서버 오류"
  */
+// 루트 엔드포인트 - 한국 시장 서비스 개요
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        module: 'korean-market',
+        description: '한국 암호화폐 시장 분석 서비스',
+        availableEndpoints: [
+          '/stats',
+          '/kimchi-premium/:symbol',
+          '/signal/:symbol',
+          '/community-sentiment/:symbol',
+          '/health'
+        ],
+        lastUpdate: new Date().toISOString(),
+        status: 'active'
+      }
+    });
+
+  } catch (error) {
+    logger.error('한국 시장 서비스 개요 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '서버 오류가 발생했습니다',
+      error: error.message
+    });
+  }
+});
+
 router.get('/kimchi-premium/:symbol', 
   param('symbol').isLength({ min: 2, max: 10 }).withMessage('코인 심볼은 2-10자여야 합니다'),
   validateInput,
