@@ -379,6 +379,38 @@ class CacheService {
     }
   }
 
+  // 김치프리미엄 데이터 캐싱
+  async setKimchiPremium(coinSymbol, premiumData, ttl = 300) {
+    const key = `kimchi_premium:${coinSymbol.toLowerCase()}`;
+    return await this.set(key, premiumData, ttl);
+  }
+
+  async getKimchiPremium(coinSymbol) {
+    const key = `kimchi_premium:${coinSymbol.toLowerCase()}`;
+    return await this.get(key);
+  }
+
+  async setKoreanMarketData(coinSymbol, marketData, ttl = 300) {
+    const key = `korean_market:${coinSymbol.toLowerCase()}`;
+    return await this.set(key, marketData, ttl);
+  }
+
+  async getKoreanMarketData(coinSymbol) {
+    const key = `korean_market:${coinSymbol.toLowerCase()}`;
+    return await this.get(key);
+  }
+
+  // 한국 커뮤니티 감정분석 캐싱
+  async setKoreanCommunitySentiment(coinSymbol, sentimentData, ttl = 1800) {
+    const key = `korean_community:${coinSymbol.toLowerCase()}`;
+    return await this.set(key, sentimentData, ttl);
+  }
+
+  async getKoreanCommunitySentiment(coinSymbol) {
+    const key = `korean_community:${coinSymbol.toLowerCase()}`;
+    return await this.get(key);
+  }
+
   // 연결 종료
   async disconnect() {
     try {

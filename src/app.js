@@ -61,6 +61,11 @@ app.use('/api/coins', require('./routes/coins'));
 app.use('/api/signals', require('./routes/signals'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/health', require('./routes/health'));
+app.use('/api/korean-market', require('./routes/koreanMarket'));
+app.use('/api/user-profiles', require('./routes/userProfiles'));
+app.use('/api/personalization', require('./routes/personalization'));
+app.use('/api/social-media', require('./routes/socialMedia'));
+app.use('/api/onchain', require('./routes/onChain'));
 
 // Swagger documentation
 if (process.env.NODE_ENV !== 'production') {
