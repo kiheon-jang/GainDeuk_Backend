@@ -146,7 +146,11 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error('사용자 프로필 목록 조회 실패:', error);
+    if (logger && logger.error) {
+      logger.error('사용자 프로필 목록 조회 실패:', error);
+    } else {
+      console.error('사용자 프로필 목록 조회 실패:', error);
+    }
     res.status(500).json({
       success: false,
       message: '사용자 프로필 목록 조회에 실패했습니다.',

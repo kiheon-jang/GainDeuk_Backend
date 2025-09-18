@@ -33,10 +33,10 @@ const validateInput = (req, res, next) => {
  *         required: true
  *         schema:
  *           type: string
- *         description: 코인 심볼 (예: BTC, ETH)
+ *         description: "코인 심볼 (예: BTC, ETH)"
  *     responses:
  *       200:
- *         description: 김치프리미엄 정보 조회 성공
+ *         description: "김치프리미엄 정보 조회 성공"
  *         content:
  *           application/json:
  *             schema:
@@ -60,9 +60,9 @@ const validateInput = (req, res, next) => {
  *                     trend:
  *                       type: string
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.get('/kimchi-premium/:symbol', 
   param('symbol').isLength({ min: 2, max: 10 }).withMessage('코인 심볼은 2-10자여야 합니다'),
@@ -115,14 +115,14 @@ router.get('/kimchi-premium/:symbol',
  *                 type: array
  *                 items:
  *                   type: string
- *                 description: 코인 심볼 배열
+ *                 description: "코인 심볼 배열"
  *     responses:
  *       200:
- *         description: 다중 김치프리미엄 정보 조회 성공
+ *         description: "다중 김치프리미엄 정보 조회 성공"
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.post('/kimchi-premium',
   body('symbols').isArray({ min: 1, max: 50 }).withMessage('심볼 배열은 1-50개여야 합니다'),
@@ -174,14 +174,14 @@ router.post('/kimchi-premium',
  *             properties:
  *               text:
  *                 type: string
- *                 description: 분석할 한국어 텍스트
+ *                 description: "분석할 한국어 텍스트"
  *     responses:
  *       200:
- *         description: 감정분석 결과
+ *         description: "감정분석 결과"
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.post('/sentiment',
   body('text').isLength({ min: 5, max: 1000 }).withMessage('텍스트는 5-1000자여야 합니다'),
@@ -222,14 +222,14 @@ router.post('/sentiment',
  *         required: true
  *         schema:
  *           type: string
- *         description: 코인 심볼
+ *         description: "코인 심볼"
  *     responses:
  *       200:
- *         description: 한국 시장 특화 신호 조회 성공
+ *         description: "한국 시장 특화 신호 조회 성공"
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.get('/signal/:symbol',
   param('symbol').isLength({ min: 2, max: 10 }).withMessage('코인 심볼은 2-10자여야 합니다'),
@@ -294,9 +294,9 @@ router.get('/signal/:symbol',
  *     tags: [Korean Market]
  *     responses:
  *       200:
- *         description: 한국 시장 통계 조회 성공
+ *         description: "한국 시장 통계 조회 성공"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.get('/stats', async (req, res) => {
   try {
@@ -342,14 +342,14 @@ router.get('/stats', async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
- *         description: 코인 심볼 (예: BTC, ETH)
+ *         description: "코인 심볼 (예: BTC, ETH)"
  *     responses:
  *       200:
- *         description: 한국 커뮤니티 감정분석 조회 성공
+ *         description: "한국 커뮤니티 감정분석 조회 성공"
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.get('/community-sentiment/:symbol',
   param('symbol').isLength({ min: 2, max: 10 }).withMessage('코인 심볼은 2-10자여야 합니다'),
@@ -395,14 +395,14 @@ router.get('/community-sentiment/:symbol',
  *                 type: array
  *                 items:
  *                   type: string
- *                 description: 코인 심볼 배열
+ *                 description: "코인 심볼 배열"
  *     responses:
  *       200:
- *         description: 다중 한국 커뮤니티 감정분석 조회 성공
+ *         description: "다중 한국 커뮤니티 감정분석 조회 성공"
  *       400:
- *         description: 잘못된 요청
+ *         description: "잘못된 요청"
  *       500:
- *         description: 서버 오류
+ *         description: "서버 오류"
  */
 router.post('/community-sentiment',
   body('symbols').isArray({ min: 1, max: 20 }).withMessage('심볼 배열은 1-20개여야 합니다'),
@@ -447,9 +447,9 @@ router.post('/community-sentiment',
  *     tags: [Korean Market]
  *     responses:
  *       200:
- *         description: 서비스 상태 정상
+ *         description: "서비스 상태 정상"
  *       500:
- *         description: 서비스 오류
+ *         description: "서비스 오류"
  */
 router.get('/health', async (req, res) => {
   try {

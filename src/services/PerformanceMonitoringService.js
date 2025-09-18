@@ -4,6 +4,38 @@ const v8 = require('v8');
 const { logger } = require('../utils/logger');
 const performanceConfig = require('../config/performance');
 
+// 안전한 로거 헬퍼 함수
+const safeLogger = {
+  info: (msg, ...args) => {
+    if (logger && safeLogger.info) {
+      safeLogger.info(msg, ...args);
+    } else {
+      console.log(msg, ...args);
+    }
+  },
+  warn: (msg, ...args) => {
+    if (logger && safeLogger.warn) {
+      safeLogger.warn(msg, ...args);
+    } else {
+      console.warn(msg, ...args);
+    }
+  },
+  error: (msg, ...args) => {
+    if (logger && safeLogger.error) {
+      safeLogger.error(msg, ...args);
+    } else {
+      console.error(msg, ...args);
+    }
+  },
+  debug: (msg, ...args) => {
+    if (logger && safeLogger.debug) {
+      safeLogger.debug(msg, ...args);
+    } else {
+      console.debug(msg, ...args);
+    }
+  }
+};
+
 /**
  * 성능 모니터링 서비스
  * 시스템 성능을 실시간으로 모니터링하고 최적화하는 서비스
@@ -51,11 +83,14 @@ class PerformanceMonitoringService extends EventEmitter {
    * @private
    */
   setupEventListeners() {
-    // 가비지 컬렉션 이벤트 리스너
+    // 가비지 컬렉션 이벤트 리스너 (v8 모듈은 이벤트를 직접 지원하지 않음)
+    // 대신 주기적으로 가비지 컬렉션 통계를 수집
     if (v8.getHeapStatistics) {
-      v8.on('gc', (stats) => {
-        this.updateGCMetrics(stats);
-      });
+      // v8.on은 지원되지 않으므로 주기적 폴링으로 대체
+      setInterval(() => {
+        const heapStats = v8.getHeapStatistics();
+        this.updateGCMetrics(heapStats);
+      }, 5000); // 5초마다 수집
     }
 
     // 프로세스 이벤트 리스너
@@ -78,13 +113,13 @@ class PerformanceMonitoringService extends EventEmitter {
    */
   async startService() {
     if (this.isRunning) {
-      logger.warn('성능 모니터링 서비스가 이미 실행 중입니다.');
+      safeLogger.warn('성능 모니터링 서비스가 이미 실행 중입니다.');
       return;
     }
 
     try {
       this.isRunning = true;
-      logger.info('성능 모니터링 서비스를 시작합니다.');
+      safeLogger.info('성능 모니터링 서비스를 시작합니다.');
 
       // 초기 메트릭 수집
       await this.collectInitialMetrics();
@@ -95,11 +130,11 @@ class PerformanceMonitoringService extends EventEmitter {
       // 성능 최적화 시작
       this.startPerformanceOptimization();
 
-      logger.info('성능 모니터링 서비스가 성공적으로 시작되었습니다.');
+      safeLogger.info('성능 모니터링 서비스가 성공적으로 시작되었습니다.');
 
     } catch (error) {
       this.isRunning = false;
-      logger.error('성능 모니터링 서비스 시작 실패:', error);
+      safeLogger.error('성능 모니터링 서비스 시작 실패:', error);
       throw error;
     }
   }
@@ -109,7 +144,7 @@ class PerformanceMonitoringService extends EventEmitter {
    */
   stopService() {
     if (!this.isRunning) {
-      logger.warn('성능 모니터링 서비스가 실행 중이 아닙니다.');
+      safeLogger.warn('성능 모니터링 서비스가 실행 중이 아닙니다.');
       return;
     }
 
@@ -121,7 +156,7 @@ class PerformanceMonitoringService extends EventEmitter {
     // 성능 최적화 중지
     this.stopPerformanceOptimization();
 
-    logger.info('성능 모니터링 서비스가 중지되었습니다.');
+    safeLogger.info('성능 모니터링 서비스가 중지되었습니다.');
   }
 
   /**
@@ -139,10 +174,10 @@ class PerformanceMonitoringService extends EventEmitter {
       // 데이터베이스 메트릭 수집
       await this.collectDatabaseMetrics();
 
-      logger.info('초기 메트릭 수집이 완료되었습니다.');
+      safeLogger.info('초기 메트릭 수집이 완료되었습니다.');
 
     } catch (error) {
-      logger.error('초기 메트릭 수집 실패:', error);
+      safeLogger.error('초기 메트릭 수집 실패:', error);
     }
   }
 
@@ -159,7 +194,7 @@ class PerformanceMonitoringService extends EventEmitter {
         this.checkAlerts();
         this.updatePerformanceHistory();
       } catch (error) {
-        logger.error('메트릭 수집 실패:', error);
+        safeLogger.error('메트릭 수집 실패:', error);
       }
     }, interval);
   }
@@ -214,7 +249,7 @@ class PerformanceMonitoringService extends EventEmitter {
       this.metrics.system.network = await this.getNetworkStats();
 
     } catch (error) {
-      logger.error('시스템 메트릭 수집 실패:', error);
+      safeLogger.error('시스템 메트릭 수집 실패:', error);
     }
   }
 
@@ -240,7 +275,7 @@ class PerformanceMonitoringService extends EventEmitter {
       this.metrics.application.gc = this.getGCMetrics();
 
     } catch (error) {
-      logger.error('애플리케이션 메트릭 수집 실패:', error);
+      safeLogger.error('애플리케이션 메트릭 수집 실패:', error);
     }
   }
 
@@ -265,7 +300,7 @@ class PerformanceMonitoringService extends EventEmitter {
       };
 
     } catch (error) {
-      logger.error('데이터베이스 메트릭 수집 실패:', error);
+      safeLogger.error('데이터베이스 메트릭 수집 실패:', error);
     }
   }
 
@@ -529,7 +564,7 @@ class PerformanceMonitoringService extends EventEmitter {
       if (heapUsage > performanceConfig.memory.gcOptimization.threshold) {
         if (global.gc) {
           global.gc();
-          logger.info('가비지 컬렉션이 강제 실행되었습니다.');
+          safeLogger.info('가비지 컬렉션이 강제 실행되었습니다.');
         }
       }
     }, interval);
@@ -541,7 +576,7 @@ class PerformanceMonitoringService extends EventEmitter {
    */
   startMemoryPoolOptimization() {
     // 메모리 풀 최적화 로직 구현
-    logger.info('메모리 풀 최적화가 시작되었습니다.');
+    safeLogger.info('메모리 풀 최적화가 시작되었습니다.');
   }
 
   /**
@@ -553,7 +588,7 @@ class PerformanceMonitoringService extends EventEmitter {
     
     this.cacheInterval = setInterval(() => {
       // 캐시 정리 로직 구현
-      logger.debug('캐시 정리가 실행되었습니다.');
+      safeLogger.debug('캐시 정리가 실행되었습니다.');
     }, interval);
   }
 
@@ -573,7 +608,7 @@ class PerformanceMonitoringService extends EventEmitter {
     this.alerts.push(errorAlert);
     this.emit('error', errorAlert);
     
-    logger.error(`${type} 발생:`, error);
+    safeLogger.error(`${type} 발생:`, error);
   }
 
   /**
@@ -592,7 +627,11 @@ class PerformanceMonitoringService extends EventEmitter {
     this.alerts.push(warningAlert);
     this.emit('warning', warningAlert);
     
-    logger.warn('시스템 경고:', warning);
+    if (logger && safeLogger.warn) {
+      safeLogger.warn('시스템 경고:', warning);
+    } else {
+      console.warn('시스템 경고:', warning);
+    }
   }
 
   /**

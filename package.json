@@ -29,6 +29,7 @@
   "author": "GainDeuk Team",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.63.0",
     "axios": "^1.6.2",
     "bullmq": "^4.15.4",
     "cheerio": "^1.0.0-rc.12",
@@ -45,6 +46,7 @@
     "morgan": "^1.10.0",
     "natural": "^6.7.0",
     "node-cron": "^3.0.3",
+    "openai": "^5.21.0",
     "redis": "^4.6.10",
     "sentiment": "^5.0.2",
     "swagger-jsdoc": "^6.2.8",
@@ -78,13 +80,19 @@
   "jest": {
     "testEnvironment": "node",
     "testTimeout": 30000,
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/server.js",
       "!src/app.js"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html"]
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
   }
 }

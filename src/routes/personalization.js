@@ -130,7 +130,11 @@ router.get('/:userId/recommendations', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('개인화 추천 생성 실패:', error);
+    if (logger && logger.error) {
+      logger.error('개인화 추천 생성 실패:', error);
+    } else {
+      console.error('개인화 추천 생성 실패:', error);
+    }
     
     if (error.message === '사용자 프로필을 찾을 수 없습니다.') {
       return res.status(404).json({
@@ -230,7 +234,11 @@ router.post('/:userId/recommendations', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('개인화 추천 생성 실패:', error);
+    if (logger && logger.error) {
+      logger.error('개인화 추천 생성 실패:', error);
+    } else {
+      console.error('개인화 추천 생성 실패:', error);
+    }
     
     if (error.message === '사용자 프로필을 찾을 수 없습니다.') {
       return res.status(404).json({

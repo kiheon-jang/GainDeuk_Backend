@@ -147,9 +147,20 @@ class KoreanMarketService {
    */
   async getUpbitPrice(symbol) {
     try {
+      // 심볼 변환 (bitcoin -> BTC, ethereum -> ETH 등)
+      const symbolMap = {
+        'bitcoin': 'BTC',
+        'ethereum': 'ETH',
+        'ripple': 'XRP',
+        'tether': 'USDT',
+        'binancecoin': 'BNB'
+      };
+      
+      const upbitSymbol = symbolMap[symbol.toLowerCase()] || symbol.toUpperCase();
+      
       const response = await axios.get(`${this.exchanges.upbit.baseUrl}/ticker`, {
         params: {
-          markets: `KRW-${symbol}`
+          markets: `KRW-${upbitSymbol}`
         },
         timeout: 5000
       });
@@ -171,7 +182,18 @@ class KoreanMarketService {
    */
   async getBithumbPrice(symbol) {
     try {
-      const response = await axios.get(`${this.exchanges.bithumb.baseUrl}/ticker/${symbol}_KRW`, {
+      // 심볼 변환 (bitcoin -> BTC, ethereum -> ETH 등)
+      const symbolMap = {
+        'bitcoin': 'BTC',
+        'ethereum': 'ETH',
+        'ripple': 'XRP',
+        'tether': 'USDT',
+        'binancecoin': 'BNB'
+      };
+      
+      const bithumbSymbol = symbolMap[symbol.toLowerCase()] || symbol.toUpperCase();
+      
+      const response = await axios.get(`${this.exchanges.bithumb.baseUrl}/ticker/${bithumbSymbol}_KRW`, {
         timeout: 5000
       });
 

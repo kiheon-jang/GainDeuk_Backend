@@ -5,14 +5,12 @@ const coinSchema = new mongoose.Schema({
     type: String, 
     required: true, 
     unique: true,
-    index: true,
     trim: true
   },
   symbol: { 
     type: String, 
     required: true,
     uppercase: true,
-    index: true,
     trim: true
   },
   name: { 
@@ -92,9 +90,7 @@ const coinSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// 인덱스 설정
-coinSchema.index({ coinId: 1 });
-coinSchema.index({ symbol: 1 });
+// 인덱스 설정 (coinId와 symbol은 unique: true로 자동 인덱스 생성됨)
 coinSchema.index({ marketCapRank: 1 });
 coinSchema.index({ lastUpdated: -1 });
 coinSchema.index({ currentPrice: -1 });

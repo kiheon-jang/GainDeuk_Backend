@@ -24,7 +24,9 @@ class PersonalizationService {
       const cacheKey = `recommendations_${userId}`;
       const cached = this.recommendationCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+        if (logger && logger.info) {
         logger.info(`캐시된 추천 반환: ${userId}`);
+      }
         return cached.data;
       }
 
@@ -47,11 +49,17 @@ class PersonalizationService {
         timestamp: Date.now()
       });
 
-      logger.info(`개인화 추천 생성 완료: ${userId}`);
+      if (logger && logger.info) {
+        logger.info(`개인화 추천 생성 완료: ${userId}`);
+      }
       return recommendations;
 
     } catch (error) {
-      logger.error('개인화 추천 생성 실패:', error);
+      if (logger && logger.error) {
+        logger.error('개인화 추천 생성 실패:', error);
+      } else {
+        console.error('개인화 추천 생성 실패:', error);
+      }
       throw error;
     }
   }
@@ -409,6 +417,170 @@ class PersonalizationService {
   }
 
   /**
+   * 다각화 수준 계산
+   * @private
+   */
+  _getDiversificationLevel(userProfile) {
+    const { experienceLevel, riskTolerance, availableTime } = userProfile;
+    
+    let level = 'low';
+    let description = '낮은 다각화 (1-2개 자산)';
+    
+    if (experienceLevel === 'intermediate' && riskTolerance >= 5) {
+      level = 'medium';
+      description = '중간 다각화 (3-5개 자산)';
+    } else if (experienceLevel === 'advanced' || experienceLevel === 'expert') {
+      if (riskTolerance >= 7) {
+        level = 'high';
+        description = '높은 다각화 (6-10개 자산)';
+      } else {
+        level = 'medium';
+        description = '중간 다각화 (3-5개 자산)';
+      }
+    }
+    
+    return {
+      level,
+      description,
+      recommendedAssets: this._getRecommendedAssetCount(level)
+    };
+  }
+
+  /**
+   * 권장 자산 수 계산
+   * @private
+   */
+  _getRecommendedAssetCount(level) {
+    switch (level) {
+      case 'low': return 2;
+      case 'medium': return 4;
+      case 'high': return 8;
+      default: return 2;
+    }
+  }
+
+  /**
+   * 리밸런싱 전략 계산
+   * @private
+   */
+  _getRebalancingStrategy(userProfile) {
+    const { experienceLevel, availableTime, riskTolerance } = userProfile;
+    
+    let frequency = 'monthly';
+    let method = 'threshold';
+    let description = '월간 리밸런싱 (임계값 기반)';
+    
+    if (experienceLevel === 'beginner') {
+      frequency = 'quarterly';
+      method = 'time-based';
+      description = '분기별 리밸런싱 (시간 기반)';
+    } else if (experienceLevel === 'advanced' || experienceLevel === 'expert') {
+      if (availableTime === 'full-time' && riskTolerance >= 7) {
+        frequency = 'weekly';
+        method = 'dynamic';
+        description = '주간 리밸런싱 (동적 조정)';
+      } else {
+        frequency = 'bi-weekly';
+        method = 'threshold';
+        description = '격주 리밸런싱 (임계값 기반)';
+      }
+    }
+    
+    return {
+      frequency,
+      method,
+      description,
+      threshold: this._getRebalancingThreshold(experienceLevel)
+    };
+  }
+
+  /**
+   * 리밸런싱 임계값 계산
+   * @private
+   */
+  _getRebalancingThreshold(experienceLevel) {
+    switch (experienceLevel) {
+      case 'beginner': return 0.15; // 15%
+      case 'intermediate': return 0.10; // 10%
+      case 'advanced': return 0.08; // 8%
+      case 'expert': return 0.05; // 5%
+      default: return 0.10;
+    }
+  }
+
+  /**
+   * 리스크 관리 전략 계산
+   * @private
+   */
+  _getRiskManagement(userProfile) {
+    const { experienceLevel, riskTolerance, availableTime } = userProfile;
+    
+    let stopLoss = 0.05; // 5%
+    let maxDrawdown = 0.15; // 15%
+    let positionSize = 0.1; // 10%
+    let hedging = false;
+    
+    // 경험 수준에 따른 조정
+    if (experienceLevel === 'beginner') {
+      stopLoss = 0.03; // 3%
+      maxDrawdown = 0.10; // 10%
+      positionSize = 0.05; // 5%
+    } else if (experienceLevel === 'intermediate') {
+      stopLoss = 0.05; // 5%
+      maxDrawdown = 0.15; // 15%
+      positionSize = 0.10; // 10%
+    } else if (experienceLevel === 'advanced') {
+      stopLoss = 0.08; // 8%
+      maxDrawdown = 0.20; // 20%
+      positionSize = 0.15; // 15%
+      hedging = true;
+    } else if (experienceLevel === 'expert') {
+      stopLoss = 0.10; // 10%
+      maxDrawdown = 0.25; // 25%
+      positionSize = 0.20; // 20%
+      hedging = true;
+    }
+    
+    // 리스크 허용도에 따른 조정
+    if (riskTolerance <= 3) {
+      stopLoss *= 0.7;
+      maxDrawdown *= 0.7;
+      positionSize *= 0.7;
+    } else if (riskTolerance >= 8) {
+      stopLoss *= 1.3;
+      maxDrawdown *= 1.3;
+      positionSize *= 1.3;
+    }
+    
+    return {
+      stopLoss: Math.round(stopLoss * 100) / 100,
+      takeProfit: Math.round(stopLoss * 2 * 100) / 100, // 2:1 비율
+      maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+      positionSize: Math.round(positionSize * 100) / 100,
+      hedging,
+      riskRewardRatio: 2.0,
+      maxDailyLoss: Math.round(maxDrawdown * 0.3 * 100) / 100, // 일일 최대 손실
+      description: this._getRiskManagementDescription(experienceLevel, riskTolerance)
+    };
+  }
+
+  /**
+   * 리스크 관리 설명 생성
+   * @private
+   */
+  _getRiskManagementDescription(experienceLevel, riskTolerance) {
+    if (experienceLevel === 'beginner') {
+      return '보수적 리스크 관리 (낮은 손절, 작은 포지션)';
+    } else if (experienceLevel === 'intermediate') {
+      return '균형잡힌 리스크 관리 (중간 손절, 적당한 포지션)';
+    } else if (experienceLevel === 'advanced') {
+      return '적극적 리스크 관리 (헤징 포함, 동적 조정)';
+    } else {
+      return '전문가급 리스크 관리 (고급 헤징, 복합 전략)';
+    }
+  }
+
+  /**
    * 포지션 사이징 방법
    * @private
    */
@@ -457,6 +629,296 @@ class PersonalizationService {
    * @private
    */
   _getTimeFilter(userProfile) {
+    const { availableTime, experienceLevel } = userProfile;
+    
+    let minTimeframe = '1h';
+    let maxTimeframe = '1d';
+    let preferredTimeframes = ['4h', '1d'];
+    
+    if (availableTime === 'minimal') {
+      minTimeframe = '4h';
+      maxTimeframe = '1w';
+      preferredTimeframes = ['1d', '1w'];
+    } else if (availableTime === 'part-time') {
+      minTimeframe = '1h';
+      maxTimeframe = '1d';
+      preferredTimeframes = ['4h', '1d'];
+    } else if (availableTime === 'full-time') {
+      minTimeframe = '15m';
+      maxTimeframe = '4h';
+      preferredTimeframes = ['1h', '4h'];
+    }
+    
+    return {
+      minTimeframe,
+      maxTimeframe,
+      preferredTimeframes,
+      description: `${minTimeframe} ~ ${maxTimeframe} 타임프레임 권장`
+    };
+  }
+
+  /**
+   * 볼륨 필터 설정
+   * @private
+   */
+  _getVolumeFilter(userProfile) {
+    const { experienceLevel, riskTolerance } = userProfile;
+    
+    let minVolume = 1000000; // $1M
+    let volumeMultiplier = 1.0;
+    
+    if (experienceLevel === 'beginner') {
+      minVolume = 5000000; // $5M (더 안전한 코인)
+      volumeMultiplier = 1.5;
+    } else if (experienceLevel === 'intermediate') {
+      minVolume = 2000000; // $2M
+      volumeMultiplier = 1.2;
+    } else if (experienceLevel === 'advanced' || experienceLevel === 'expert') {
+      minVolume = 500000; // $500K (더 많은 기회)
+      volumeMultiplier = 0.8;
+    }
+    
+    return {
+      minVolume,
+      volumeMultiplier,
+      description: `최소 거래량: $${(minVolume / 1000000).toFixed(1)}M 이상`
+    };
+  }
+
+  /**
+   * 변동성 필터 설정
+   * @private
+   */
+  _getVolatilityFilter(userProfile) {
+    const { experienceLevel, riskTolerance } = userProfile;
+    
+    let maxVolatility = 0.15; // 15%
+    let volatilityTolerance = 'medium';
+    
+    if (experienceLevel === 'beginner' || riskTolerance <= 3) {
+      maxVolatility = 0.10; // 10%
+      volatilityTolerance = 'low';
+    } else if (experienceLevel === 'intermediate') {
+      maxVolatility = 0.15; // 15%
+      volatilityTolerance = 'medium';
+    } else if (experienceLevel === 'advanced' || experienceLevel === 'expert') {
+      maxVolatility = 0.25; // 25%
+      volatilityTolerance = 'high';
+    }
+    
+    return {
+      maxVolatility,
+      volatilityTolerance,
+      description: `최대 변동성: ${(maxVolatility * 100).toFixed(1)}% (${volatilityTolerance} 수준)`
+    };
+  }
+
+  /**
+   * 포지션 사이징 계산
+   * @private
+   */
+  _calculatePositionSizing(userProfile, marketData) {
+    const stopLoss = this._calculateStopLoss(userProfile);
+    
+    return {
+      recommendedSize: this._getRecommendedPositionSize(userProfile, marketData),
+      scaling: this._getPositionScaling(userProfile)
+    };
+  }
+
+  /**
+   * 권장 포지션 크기 계산
+   * @private
+   */
+  _getRecommendedPositionSize(userProfile, marketData) {
+    const { riskTolerance, experienceLevel } = userProfile;
+    
+    let baseSize = 0.05; // 5%
+    
+    if (experienceLevel === 'beginner') {
+      baseSize = 0.02; // 2%
+    } else if (experienceLevel === 'intermediate') {
+      baseSize = 0.05; // 5%
+    } else if (experienceLevel === 'advanced') {
+      baseSize = 0.10; // 10%
+    } else if (experienceLevel === 'expert') {
+      baseSize = 0.15; // 15%
+    }
+    
+    // 리스크 허용도에 따른 조정
+    if (riskTolerance <= 3) {
+      baseSize *= 0.5;
+    } else if (riskTolerance >= 8) {
+      baseSize *= 1.5;
+    }
+    
+    return Math.round(baseSize * 100) / 100;
+  }
+
+  /**
+   * 포지션 스케일링 전략
+   * @private
+   */
+  _getPositionScaling(userProfile) {
+    const { experienceLevel } = userProfile;
+    
+    if (experienceLevel === 'beginner') {
+      return {
+        method: 'fixed',
+        description: '고정 포지션 크기'
+      };
+    } else if (experienceLevel === 'intermediate') {
+      return {
+        method: 'volatility-adjusted',
+        description: '변동성 조정 포지션'
+      };
+    } else {
+      return {
+        method: 'dynamic',
+        description: '동적 포지션 조정'
+      };
+    }
+  }
+
+  /**
+   * 알림 설정 최적화
+   * @private
+   */
+  _optimizeAlertSettings(userProfile) {
+    const { availableTime, experienceLevel } = userProfile;
+    
+    return {
+      email: {
+        frequency: this._getOptimalEmailFrequency(userProfile),
+        priority: this._getEmailPriority(userProfile)
+      },
+      push: {
+        enabled: availableTime !== 'minimal',
+        frequency: availableTime === 'full-time' ? 'high' : 'medium'
+      }
+    };
+  }
+
+  /**
+   * 최적 이메일 빈도
+   * @private
+   */
+  _getOptimalEmailFrequency(userProfile) {
+    const { availableTime } = userProfile;
+    
+    if (availableTime === 'minimal') {
+      return 'daily';
+    } else if (availableTime === 'part-time') {
+      return 'twice-daily';
+    } else {
+      return 'as-needed';
+    }
+  }
+
+  /**
+   * 이메일 우선순위
+   * @private
+   */
+  _getEmailPriority(userProfile) {
+    const { experienceLevel } = userProfile;
+    
+    if (experienceLevel === 'beginner') {
+      return 'high';
+    } else if (experienceLevel === 'intermediate') {
+      return 'medium';
+    } else {
+      return 'low';
+    }
+  }
+
+  /**
+   * 시장 조건 적응
+   * @private
+   */
+  _adaptToMarketConditions(userProfile, marketData) {
+    return {
+      bullMarket: this._getBullMarketAdaptation(userProfile),
+      bearMarket: this._getBearMarketAdaptation(userProfile),
+      sidewaysMarket: this._getSidewaysMarketAdaptation(userProfile),
+      highVolatility: this._getHighVolatilityAdaptation(userProfile)
+    };
+  }
+
+  /**
+   * 상승장 적응 전략
+   * @private
+   */
+  _getBullMarketAdaptation(userProfile) {
+    return {
+      strategy: 'momentum',
+      description: '모멘텀 기반 매수 전략',
+      riskAdjustment: 1.2
+    };
+  }
+
+  /**
+   * 하락장 적응 전략
+   * @private
+   */
+  _getBearMarketAdaptation(userProfile) {
+    return {
+      strategy: 'defensive',
+      description: '방어적 포지션 관리',
+      riskAdjustment: 0.7
+    };
+  }
+
+  /**
+   * 횡보장 적응 전략
+   * @private
+   */
+  _getSidewaysMarketAdaptation(userProfile) {
+    return {
+      strategy: 'range-trading',
+      description: '레인지 트레이딩',
+      riskAdjustment: 0.9
+    };
+  }
+
+  /**
+   * 고변동성 적응 전략
+   * @private
+   */
+  _getHighVolatilityAdaptation(userProfile) {
+    return {
+      strategy: 'volatility-adjusted',
+      description: '변동성 조정 포지션',
+      riskAdjustment: 0.8
+    };
+  }
+
+  /**
+   * 추천 신뢰도 계산
+   * @private
+   */
+  _calculateRecommendationConfidence(userProfile) {
+    const { experienceLevel, riskTolerance } = userProfile;
+    
+    let confidence = 0.7; // 기본 70%
+    
+    if (experienceLevel === 'beginner') {
+      confidence = 0.8; // 초보자는 더 보수적
+    } else if (experienceLevel === 'intermediate') {
+      confidence = 0.75;
+    } else if (experienceLevel === 'advanced') {
+      confidence = 0.7;
+    } else if (experienceLevel === 'expert') {
+      confidence = 0.65; // 전문가는 더 공격적
+    }
+    
+    return Math.round(confidence * 100) / 100;
+  }
+
+  /**
+   * 시간 필터 설정 (중복 제거)
+   * @private
+   */
+  _getTimeFilterOld(userProfile) {
     const { activeHours, availableTime } = userProfile;
 
     if (availableTime === 'minimal') {

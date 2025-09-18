@@ -9,8 +9,7 @@ const userProfileSchema = new mongoose.Schema({
   userId: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
   },
   
   // 투자 성향 관련
@@ -189,8 +188,7 @@ const userProfileSchema = new mongoose.Schema({
   versionKey: false
 });
 
-// 인덱스 설정
-userProfileSchema.index({ userId: 1 });
+// 인덱스 설정 (userId는 unique: true로 자동 인덱스 생성됨)
 userProfileSchema.index({ investmentStyle: 1 });
 userProfileSchema.index({ experienceLevel: 1 });
 userProfileSchema.index({ lastActive: -1 });
