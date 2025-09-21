@@ -43,16 +43,21 @@ app.use(performanceMonitor.trackApiPerformance());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting (개발 환경용 완화된 설정)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15분
-  max: process.env.RATE_LIMIT_MAX || 100, // 요청 제한
+  max: process.env.RATE_LIMIT_MAX || 1000, // 요청 제한 (개발용으로 증가)
   message: {
     success: false,
     error: '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // 개발 환경에서는 더 관대한 설정
+  skip: (req) => {
+    // 개발 환경에서는 localhost 요청은 제한하지 않음
+    return process.env.NODE_ENV === 'development' && req.ip === '::1';
+  }
 });
 app.use('/api/', limiter);
 
