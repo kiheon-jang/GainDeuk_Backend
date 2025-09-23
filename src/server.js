@@ -3,6 +3,7 @@ const DatabaseConfig = require('../config/database');
 const RedisConfig = require('../config/redis');
 const logger = require('./utils/logger');
 const SchedulerService = require('./services/SchedulerService');
+const NewsSchedulerService = require('./services/NewsSchedulerService');
 const { processErrorHandler } = require('./middleware/errorHandler');
 
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,11 @@ async function startServer() {
       global.scheduler = new SchedulerService();
       global.scheduler.startScheduler();
       logger.info('📅 스케줄러가 시작되었습니다');
+      
+      // Start news scheduler
+      global.newsScheduler = new NewsSchedulerService();
+      await global.newsScheduler.startScheduler();
+      logger.info('📰 뉴스 스케줄러가 시작되었습니다');
     } else {
       logger.info('📅 스케줄러가 비활성화되어 있습니다');
     }
@@ -76,6 +82,12 @@ async function gracefulShutdown(signal) {
     if (global.scheduler) {
       global.scheduler.stopScheduler();
       logger.info('✅ 스케줄러가 중지되었습니다');
+    }
+    
+    // Stop news scheduler
+    if (global.newsScheduler) {
+      global.newsScheduler.stopScheduler();
+      logger.info('✅ 뉴스 스케줄러가 중지되었습니다');
     }
     
     // Close database connections

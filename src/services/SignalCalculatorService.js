@@ -3,6 +3,7 @@ const CoinGeckoService = require('./CoinGeckoService');
 const NewsService = require('./NewsService');
 const WhaleService = require('./WhaleService');
 const CacheService = require('./CacheService');
+const SocialMediaService = require('./SocialMediaService');
 
 class SignalCalculatorService {
   constructor() {
@@ -11,12 +12,12 @@ class SignalCalculatorService {
     this.whaleService = new WhaleService();
     this.cacheService = new CacheService();
     
-    // 가중치 설정
+    // 가중치 설정 (뉴스 분석 재활성화)
     this.weights = {
       price: 0.35,      // 가격 모멘텀
       volume: 0.25,     // 거래량
       market: 0.20,     // 시장 포지션
-      sentiment: 0.15,  // 감정분석
+      sentiment: 0.15,  // 감정분석 (DB에서 빠르게 조회)
       whale: 0.05       // 고래 활동
     };
 
@@ -52,7 +53,7 @@ class SignalCalculatorService {
       const priceScore = this.calculatePriceScore(priceData);
       const volumeScore = this.calculateVolumeScore(priceData);
       const marketScore = this.calculateMarketScore(priceData);
-      const sentimentScore = await this.calculateSentimentScore(symbol);
+      const sentimentScore = await this.calculateSentimentScore(symbol); // DB에서 빠르게 조회
       const whaleScore = await this.calculateWhaleScore(symbol);
 
       // 가중 평균으로 최종 점수 계산
@@ -64,10 +65,17 @@ class SignalCalculatorService {
         whale: whaleScore
       });
 
+      // 변동성 및 거래량 비율 계산
+      const volatility = this.calculateVolatility(priceData);
+      const volumeRatio = this.calculateVolumeRatio(priceData);
+      
+      // 새로운 전략 분류 로직 사용
+      const strategy = this.determineStrategy(finalScore, volatility, volumeRatio);
+      
       // 추천 액션 및 타임프레임 결정
       const recommendation = this.getRecommendation(finalScore);
-      const timeframe = this.getTimeframe(finalScore);
-      const priority = this.getPriority(finalScore, priceData);
+      const timeframe = strategy.timeframe;
+      const priority = strategy.priority;
 
       const signal = {
         coinId,
@@ -94,12 +102,19 @@ class SignalCalculatorService {
             change_7d: priceData.price_change_percentage_7d || 0,
             change_30d: priceData.price_change_percentage_30d || 0
           },
-          volumeRatio: this.calculateVolumeRatio(priceData),
+          volumeRatio: volumeRatio,
+          volatility: volatility,
           whaleActivity: whaleScore,
           newsCount: 0, // 나중에 설정
           lastUpdated: new Date(),
           calculationTime: Date.now() - startTime,
-          dataQuality: this.assessDataQuality(priceData)
+          dataQuality: this.assessDataQuality(priceData),
+          strategy: {
+            determinedBy: 'score_volatility_volume',
+            score: finalScore,
+            volatility: volatility,
+            volumeRatio: volumeRatio
+          }
         }
       };
 
@@ -243,19 +258,108 @@ class SignalCalculatorService {
     }
   }
 
-  // 감정분석 점수 계산
+  // 감정분석 점수 계산 (뉴스 + 소셜미디어)
   async calculateSentimentScore(symbol) {
     try {
-      const sentiment = await this.newsService.getCoinSentiment(symbol);
+      const News = require('../models/News');
       
-      if (typeof sentiment === 'number') {
-        return sentiment;
+      // 1. 뉴스 감정분석 점수
+      let newsSentiment = 50; // 기본값
+      const stats = await News.getSentimentStats(symbol, 24);
+      
+      if (stats && stats.length > 0 && stats[0].totalNews > 0) {
+        newsSentiment = stats[0].avgSentiment;
+        logger.info(`News sentiment for ${symbol}: ${newsSentiment.toFixed(2)} (${stats[0].totalNews} articles)`);
+      } else {
+        logger.warning(`No news data found for ${symbol}, using default sentiment`);
       }
       
-      return sentiment.score || 50;
+      // 2. 소셜미디어 감정분석 점수
+      let socialSentiment = 50; // 기본값
+      try {
+        const socialData = SocialMediaService.getSocialData();
+        logger.info(`Social data for ${symbol}:`, JSON.stringify(socialData, null, 2));
+        
+        if (socialData && socialData.twitter && socialData.telegram) {
+          // 트위터와 텔레그램 데이터에서 감정분석 점수 추출
+          const twitterSentiment = this.extractSentimentFromSocialData(socialData.twitter, symbol);
+          const telegramSentiment = this.extractSentimentFromSocialData(socialData.telegram, symbol);
+          
+          logger.info(`Twitter sentiment for ${symbol}: ${twitterSentiment}, Telegram sentiment: ${telegramSentiment}`);
+          
+          // 소셜미디어 감정분석 평균 계산
+          const socialScores = [twitterSentiment, telegramSentiment].filter(score => score !== 50);
+          if (socialScores.length > 0) {
+            socialSentiment = socialScores.reduce((sum, score) => sum + score, 0) / socialScores.length;
+            logger.info(`Social sentiment for ${symbol}: ${socialSentiment.toFixed(2)} (${socialScores.length} sources)`);
+          } else {
+            logger.info(`No valid social sentiment scores for ${symbol}, using default 50`);
+          }
+        } else {
+          logger.info(`No social data available for ${symbol}`);
+        }
+      } catch (error) {
+        logger.warning(`Social sentiment calculation failed for ${symbol}:`, error.message);
+      }
+      
+      // 3. 뉴스와 소셜미디어 가중 평균 (뉴스 70%, 소셜미디어 30%)
+      const finalSentiment = (newsSentiment * 0.7) + (socialSentiment * 0.3);
+      
+      logger.info(`Combined sentiment for ${symbol}: ${finalSentiment.toFixed(2)} (News: ${newsSentiment.toFixed(2)}, Social: ${socialSentiment.toFixed(2)})`);
+      return Math.round(finalSentiment);
+      
     } catch (error) {
-      logger.error(`Sentiment score calculation failed for ${symbol}:`, error);
-      return 50;
+      logger.warning(`Sentiment score calculation failed for ${symbol}:`, error.message);
+      return 50; // 기본값 반환
+    }
+  }
+  
+  // 소셜미디어 데이터에서 감정분석 점수 추출
+  extractSentimentFromSocialData(socialData, symbol) {
+    try {
+      if (!socialData || !socialData.data || socialData.data.length === 0) {
+        return 50; // 기본값
+      }
+      
+      // 해당 심볼과 관련된 데이터 필터링
+      const relevantData = socialData.data.filter(item => {
+        const text = (item.text || item.content || '').toLowerCase();
+        return text.includes(symbol.toLowerCase()) || 
+               text.includes('crypto') || 
+               text.includes('bitcoin') || 
+               text.includes('ethereum');
+      });
+      
+      if (relevantData.length === 0) {
+        return 50; // 기본값
+      }
+      
+      // 감정분석 점수 추출 및 평균 계산
+      const sentimentScores = relevantData
+        .map(item => {
+          // sentiment가 문자열인 경우 점수로 변환
+          if (typeof item.sentiment === 'string') {
+            switch (item.sentiment.toLowerCase()) {
+              case 'positive': return 75;
+              case 'negative': return 25;
+              case 'neutral': return 50;
+              default: return 50;
+            }
+          }
+          // sentiment가 객체인 경우 score 사용
+          return item.sentiment?.score || 50;
+        })
+        .filter(score => score !== 50);
+      
+      if (sentimentScores.length === 0) {
+        return 50; // 기본값
+      }
+      
+      return sentimentScores.reduce((sum, score) => sum + score, 0) / sentimentScores.length;
+      
+    } catch (error) {
+      logger.warning(`Social sentiment extraction failed for ${symbol}:`, error.message);
+      return 50; // 기본값
     }
   }
 
@@ -302,7 +406,73 @@ class SignalCalculatorService {
     }
   }
 
-  // 타임프레임 결정
+  // 변동성 계산 (가격 변화율의 표준편차 근사)
+  calculateVolatility(priceData) {
+    try {
+      const changes = [
+        priceData.price_change_percentage_1h || 0,
+        priceData.price_change_percentage_24h || 0,
+        priceData.price_change_percentage_7d || 0,
+        priceData.price_change_percentage_30d || 0
+      ];
+      
+      // 절댓값으로 변동성 계산
+      const absChanges = changes.map(change => Math.abs(change));
+      const avgChange = absChanges.reduce((sum, change) => sum + change, 0) / absChanges.length;
+      
+      return avgChange;
+    } catch (error) {
+      logger.error('Volatility calculation failed:', error);
+      return 10; // 기본값
+    }
+  }
+
+  // 점수 기반 전략 분류 로직
+  determineStrategy(score, volatility, volumeRatio) {
+    try {
+      // SCALPING: 점수 80+ 이고 변동성 낮음 (10% 미만)
+      if (score >= 80 && volatility < 10) {
+        return {
+          timeframe: "SCALPING",
+          action: "BUY", 
+          priority: "high_priority"
+        };
+      } 
+      // DAY_TRADING: 점수 70-79 이고 변동성 중간 (20% 미만)
+      else if (score >= 70 && volatility < 20) {
+        return {
+          timeframe: "DAY_TRADING",
+          action: score > 75 ? "BUY" : "HOLD",
+          priority: "medium_priority"
+        };
+      } 
+      // SWING_TRADING: 점수 60-69
+      else if (score >= 60) {
+        return {
+          timeframe: "SWING_TRADING", 
+          action: volatility > 15 ? "SELL" : "BUY",
+          priority: "medium_priority"
+        };
+      } 
+      // LONG_TERM: 점수 60 미만
+      else {
+        return {
+          timeframe: "LONG_TERM",
+          action: "HOLD",
+          priority: "low_priority"
+        };
+      }
+    } catch (error) {
+      logger.error('Strategy determination failed:', error);
+      return {
+        timeframe: "LONG_TERM",
+        action: "HOLD",
+        priority: "low_priority"
+      };
+    }
+  }
+
+  // 기존 타임프레임 결정 메서드 (하위 호환성 유지)
   getTimeframe(score) {
     if (score >= 90 || score <= 10) {
       return 'SCALPING'; // 매우 강한 신호
@@ -412,6 +582,29 @@ class SignalCalculatorService {
     );
   }
 
+  // 전략별 신호 필터링
+  filterSignalsByStrategy(signals, strategy) {
+    return signals.filter(signal => signal.timeframe === strategy);
+  }
+
+  // 점수 범위별 전략 분류
+  classifySignalsByStrategy(signals) {
+    const classified = {
+      SCALPING: [],
+      DAY_TRADING: [],
+      SWING_TRADING: [],
+      LONG_TERM: []
+    };
+
+    signals.forEach(signal => {
+      if (classified[signal.timeframe]) {
+        classified[signal.timeframe].push(signal);
+      }
+    });
+
+    return classified;
+  }
+
   // 신호 통계 생성
   generateSignalStats(signals) {
     try {
@@ -429,15 +622,21 @@ class SignalCalculatorService {
         longTerm: 0,
         highPriority: 0,
         mediumPriority: 0,
-        lowPriority: 0
+        lowPriority: 0,
+        avgVolatility: 0,
+        avgVolumeRatio: 0
       };
 
       if (signals.length === 0) return stats;
 
       let totalScore = 0;
+      let totalVolatility = 0;
+      let totalVolumeRatio = 0;
       
       signals.forEach(signal => {
         totalScore += signal.finalScore;
+        totalVolatility += signal.metadata?.volatility || 0;
+        totalVolumeRatio += signal.metadata?.volumeRatio || 0;
         
         // 추천 액션별 카운트
         switch (signal.recommendation.action) {
@@ -466,6 +665,8 @@ class SignalCalculatorService {
       });
 
       stats.avgScore = Math.round(totalScore / signals.length);
+      stats.avgVolatility = Math.round((totalVolatility / signals.length) * 100) / 100;
+      stats.avgVolumeRatio = Math.round((totalVolumeRatio / signals.length) * 100) / 100;
       
       return stats;
     } catch (error) {

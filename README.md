@@ -21,7 +21,9 @@
 - 고래 활동 분석
 
 ### 💡 투자 전략 추천
-- 타임프레임별 전략 (스켈핑/데이트레이딩/스윙/장기)
+- **점수 기반 전략 분류**: 점수, 변동성, 거래량 비율을 종합 분석
+- **전략별 신호 필터링**: SCALPING, DAY_TRADING, SWING_TRADING, LONG_TERM
+- **동적 전략 결정**: 시장 상황에 따른 전략 자동 조정
 - 신호 강도별 추천 (STRONG_BUY, BUY, HOLD, SELL, STRONG_SELL)
 - 신뢰도 표시 (HIGH, MEDIUM, LOW)
 
@@ -89,6 +91,46 @@
 - 무료 서비스 최대 활용
 - 필요시 유료 서비스 최소화
 
+## 🎯 전략별 신호 분류 시스템
+
+### 전략 분류 로직
+새로운 점수 기반 전략 분류 시스템이 구현되어 각 신호를 적절한 투자 전략으로 자동 분류합니다:
+
+#### SCALPING (스켈핑)
+- **조건**: 점수 80+ 이고 변동성 10% 미만
+- **특징**: 단기 고수익 전략, 빠른 진입/청산
+- **대상**: 안정적이면서 강한 신호를 보이는 코인
+
+#### DAY_TRADING (데이트레이딩)
+- **조건**: 점수 70-79 이고 변동성 20% 미만
+- **특징**: 일일 거래 전략, 하루 내 진입/청산
+- **대상**: 중간 수준의 신호와 적당한 변동성
+
+#### SWING_TRADING (스윙트레이딩)
+- **조건**: 점수 60-69
+- **특징**: 중기 거래 전략, 며칠~몇 주 보유
+- **대상**: 변동성이 높으면 매도, 낮으면 매수 신호
+
+#### LONG_TERM (장기투자)
+- **조건**: 점수 60 미만
+- **특징**: 장기 보유 전략, 수개월~수년 보유
+- **대상**: 약한 신호이지만 장기적 가치가 있는 코인
+
+### API 사용 예시
+```bash
+# 스켈핑 전략 신호 조회
+curl "http://localhost:3000/api/signals?strategy=SCALPING&limit=10"
+
+# 데이트레이딩 전략 신호 조회
+curl "http://localhost:3000/api/signals?strategy=DAY_TRADING&limit=10"
+
+# 스윙트레이딩 전략 신호 조회
+curl "http://localhost:3000/api/signals?strategy=SWING_TRADING&limit=10"
+
+# 장기투자 전략 신호 조회
+curl "http://localhost:3000/api/signals?strategy=LONG_TERM&limit=10"
+```
+
 ## 🚀 빠른 시작
 
 ### 1. 저장소 클론
@@ -127,6 +169,15 @@ npm start
 ### 6. API 문서 확인
 - Swagger UI: http://localhost:3000/api-docs
 - 헬스체크: http://localhost:3000/health
+
+### 7. 전략별 API 테스트
+```bash
+# 신호 데이터 새로고침
+node refresh_signals.js
+
+# 전략별 API 테스트
+node test_strategy_api.js
+```
 
 ## 📁 프로젝트 구조
 
@@ -262,7 +313,11 @@ npm run test:integration
 
 ### 주요 엔드포인트
 - `GET /api/coins` - 코인 목록
-- `GET /api/signals` - 신호 목록
+- `GET /api/signals` - 신호 목록 (전략별 필터링 지원)
+- `GET /api/signals?strategy=SCALPING` - 스켈핑 전략 신호
+- `GET /api/signals?strategy=DAY_TRADING` - 데이트레이딩 전략 신호
+- `GET /api/signals?strategy=SWING_TRADING` - 스윙트레이딩 전략 신호
+- `GET /api/signals?strategy=LONG_TERM` - 장기 투자 전략 신호
 - `GET /api/alerts` - 알림 목록
 - `GET /api/health` - 헬스체크
 

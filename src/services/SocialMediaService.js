@@ -65,7 +65,7 @@ class SocialMediaService {
 
     try {
       this.isRunning = true;
-      logger.info('소셜미디어 모니터링을 시작합니다.');
+      console.log('소셜미디어 모니터링을 시작합니다.');
 
       // 초기 데이터 수집
       await this.collectInitialData();
@@ -75,15 +75,15 @@ class SocialMediaService {
         try {
           await this.monitorSocialMedia();
         } catch (error) {
-          logger.error('소셜미디어 모니터링 중 오류 발생:', error);
+          console.error('소셜미디어 모니터링 중 오류 발생:', error?.message || error?.toString() || '알 수 없는 오류');
         }
       }, 5 * 60 * 1000);
 
-      logger.info('소셜미디어 모니터링이 성공적으로 시작되었습니다.');
+      console.log('소셜미디어 모니터링이 성공적으로 시작되었습니다.');
 
     } catch (error) {
       this.isRunning = false;
-      logger.error('소셜미디어 모니터링 시작 실패:', error);
+      console.error('소셜미디어 모니터링 시작 실패:', error?.message || error?.toString() || '알 수 없는 오류');
       throw error;
     }
   }
@@ -104,15 +104,16 @@ class SocialMediaService {
       this.monitoringInterval = null;
     }
 
-    logger.info('소셜미디어 모니터링이 중지되었습니다.');
+    console.log('소셜미디어 모니터링이 중지되었습니다.');
   }
 
   /**
    * 초기 데이터 수집
    */
   async collectInitialData() {
-    logger.info('초기 소셜미디어 데이터를 수집합니다.');
+    console.log('초기 소셜미디어 데이터를 수집합니다.');
 
+    // 실제 API 호출만 수행
     const promises = [
       this.collectTwitterData(),
       this.collectTelegramData()
@@ -125,7 +126,7 @@ class SocialMediaService {
    * 주기적 소셜미디어 모니터링
    */
   async monitorSocialMedia() {
-    logger.debug('소셜미디어 데이터를 수집합니다.');
+    console.log('소셜미디어 데이터를 수집합니다.');
 
     const promises = [
       this.collectTwitterData(),
@@ -138,7 +139,7 @@ class SocialMediaService {
     results.forEach((result, index) => {
       const platforms = ['twitter', 'telegram'];
       if (result.status === 'rejected') {
-        logger.error(`${platforms[index]} 데이터 수집 실패:`, result.reason);
+        console.error(`${platforms[index]} 데이터 수집 실패:`, result.reason?.message || result.reason?.toString() || '알 수 없는 오류');
       }
     });
 
@@ -146,41 +147,32 @@ class SocialMediaService {
     this.notifySubscribers();
   }
 
+
   /**
    * Twitter/X 데이터 수집
    */
   async collectTwitterData() {
     if (!this.apiConfig.twitter.bearerToken) {
-      logger.warn('Twitter Bearer Token이 설정되지 않았습니다.');
+      console.log('Twitter Bearer Token이 설정되지 않았습니다.');
       return;
     }
 
     try {
       // Rate limiting 체크
       if (!this.checkRateLimit('twitter')) {
-        logger.warn('Twitter API Rate limit에 도달했습니다.');
+        console.log('Twitter API Rate limit에 도달했습니다.');
         return;
       }
 
       const tweets = [];
       
-      // 각 모니터링 대상 계정에서 최근 트윗 수집
-      for (const account of this.monitoringTargets.twitter) {
-        try {
-          const response = await this.fetchTwitterTweets(account);
-          tweets.push(...response);
-        } catch (error) {
-          logger.error(`Twitter 계정 ${account} 데이터 수집 실패:`, error);
-        }
-      }
-
-      // 키워드 기반 트윗 검색
-      for (const keyword of this.cryptoKeywords.slice(0, 5)) { // Rate limit 고려하여 일부만
+      // 키워드 기반 트윗 검색 (더 안정적)
+      for (const keyword of this.cryptoKeywords.slice(0, 3)) { // Rate limit 고려하여 일부만
         try {
           const response = await this.searchTwitterTweets(keyword);
           tweets.push(...response);
         } catch (error) {
-          logger.error(`Twitter 키워드 ${keyword} 검색 실패:`, error);
+          console.error(`Twitter 키워드 ${keyword} 검색 실패:`, error?.message || error?.toString() || '알 수 없는 오류');
         }
       }
 
@@ -192,11 +184,17 @@ class SocialMediaService {
         count: processedTweets.length
       });
 
-      logger.info(`Twitter 데이터 수집 완료: ${processedTweets.length}개 트윗`);
+      console.log(`Twitter 데이터 수집 완료: ${processedTweets.length}개 트윗`);
 
     } catch (error) {
-      logger.error('Twitter 데이터 수집 실패:', error);
-      throw error;
+      console.error('Twitter 데이터 수집 실패:', error?.message || error?.toString() || '알 수 없는 오류');
+      // 에러가 발생해도 빈 데이터로 저장
+      this.socialData.set('twitter', {
+        data: [],
+        timestamp: new Date(),
+        count: 0,
+        error: error?.message || 'Unknown error'
+      });
     }
   }
 
@@ -213,7 +211,7 @@ class SocialMediaService {
       }
     });
 
-    if (response.data.data) {
+    if (response?.data?.data) {
       const userId = response.data.data.id;
       const tweetsUrl = `${this.apiConfig.twitter.baseUrl}/users/${userId}/tweets`;
       
@@ -228,7 +226,7 @@ class SocialMediaService {
         }
       });
 
-      return tweetsResponse.data.data || [];
+      return tweetsResponse?.data?.data || [];
     }
 
     return [];
@@ -238,21 +236,26 @@ class SocialMediaService {
    * Twitter 트윗 검색
    */
   async searchTwitterTweets(keyword) {
-    const url = `${this.apiConfig.twitter.baseUrl}/tweets/search/recent`;
-    
-    const response = await axios.get(url, {
-      headers: {
-        'Authorization': `Bearer ${this.apiConfig.twitter.bearerToken}`,
-        'Content-Type': 'application/json'
-      },
-      params: {
-        'query': `${keyword} -is:retweet lang:en`,
-        'max_results': 10,
-        'tweet.fields': 'created_at,public_metrics,context_annotations,author_id'
-      }
-    });
+    try {
+      const url = `${this.apiConfig.twitter.baseUrl}/tweets/search/recent`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiConfig.twitter.bearerToken}`,
+          'Content-Type': 'application/json'
+        },
+        params: {
+          'query': `${keyword} -is:retweet lang:en`,
+          'max_results': 10,
+          'tweet.fields': 'created_at,public_metrics,context_annotations,author_id'
+        }
+      });
 
-    return response.data.data || [];
+      return response?.data?.data || [];
+    } catch (error) {
+      console.error(`Twitter 검색 실패 (${keyword}):`, error?.response?.status, error?.response?.data?.detail || error?.message);
+      return [];
+    }
   }
 
   /**
@@ -260,27 +263,25 @@ class SocialMediaService {
    */
   async collectTelegramData() {
     if (!this.apiConfig.telegram.botToken) {
-      logger.warn('Telegram Bot Token이 설정되지 않았습니다.');
+      console.log('Telegram Bot Token이 설정되지 않았습니다.');
       return;
     }
 
     try {
       // Rate limiting 체크
       if (!this.checkRateLimit('telegram')) {
-        logger.warn('Telegram API Rate limit에 도달했습니다.');
+        console.log('Telegram API Rate limit에 도달했습니다.');
         return;
       }
 
       const messages = [];
 
-      // 각 모니터링 대상 채널에서 메시지 수집
-      for (const channel of this.monitoringTargets.telegram) {
-        try {
-          const response = await this.fetchTelegramMessages(channel);
-          messages.push(...response);
-        } catch (error) {
-          logger.error(`Telegram 채널 ${channel} 데이터 수집 실패:`, error);
-        }
+      // 봇이 받은 메시지에서 암호화폐 관련 메시지 필터링
+      try {
+        const response = await this.fetchTelegramMessages();
+        messages.push(...response);
+      } catch (error) {
+        console.error(`Telegram 메시지 수집 실패:`, error?.message || error?.toString() || '알 수 없는 오류');
       }
 
       // 데이터 처리 및 저장
@@ -291,28 +292,50 @@ class SocialMediaService {
         count: processedMessages.length
       });
 
-      logger.info(`Telegram 데이터 수집 완료: ${processedMessages.length}개 메시지`);
+      console.log(`Telegram 데이터 수집 완료: ${processedMessages.length}개 메시지`);
 
     } catch (error) {
-      logger.error('Telegram 데이터 수집 실패:', error);
-      throw error;
+      console.error('Telegram 데이터 수집 실패:', error?.message || error?.toString() || '알 수 없는 오류');
+      // 에러가 발생해도 빈 데이터로 저장
+      this.socialData.set('telegram', {
+        data: [],
+        timestamp: new Date(),
+        count: 0,
+        error: error?.message || 'Unknown error'
+      });
     }
   }
 
   /**
    * 텔레그램 메시지 가져오기
    */
-  async fetchTelegramMessages(channel) {
-    const url = `${this.apiConfig.telegram.baseUrl}${this.apiConfig.telegram.botToken}/getUpdates`;
-    
-    const response = await axios.get(url, {
-      params: {
-        'chat_id': channel,
-        'limit': 10
-      }
-    });
+  async fetchTelegramMessages() {
+    try {
+      const url = `${this.apiConfig.telegram.baseUrl}${this.apiConfig.telegram.botToken}/getUpdates`;
+      
+      const response = await axios.get(url, {
+        params: {
+          'limit': 10,
+          'timeout': 30
+        }
+      });
 
-    return response.data.result || [];
+      const updates = response?.data?.result || [];
+      
+      // 암호화폐 관련 키워드가 포함된 메시지만 필터링
+      const cryptoMessages = updates.filter(update => {
+        if (!update.message || !update.message.text) return false;
+        
+        const text = update.message.text.toLowerCase();
+        return this.cryptoKeywords.some(keyword => text.includes(keyword)) ||
+               this.koreanKeywords.some(keyword => text.includes(keyword));
+      });
+
+      return cryptoMessages;
+    } catch (error) {
+      console.error(`Telegram API 호출 실패:`, error?.response?.status, error?.response?.data?.description || error?.message);
+      return [];
+    }
   }
 
 
@@ -341,17 +364,20 @@ class SocialMediaService {
    * 텔레그램 데이터 처리
    */
   processTelegramData(messages) {
-    return messages.map(message => ({
-      id: message.message_id,
-      text: message.text || '',
-      author: message.from?.username || 'Unknown',
-      platform: 'telegram',
-      timestamp: new Date(message.date * 1000).toISOString(),
-      chat: message.chat?.title || 'Unknown',
-      sentiment: this.analyzeSentiment(message.text || ''),
-      relevance: this.calculateRelevance(message.text || ''),
-      keywords: this.extractKeywords(message.text || '')
-    }));
+    return messages.map(update => {
+      const message = update.message;
+      return {
+        id: message.message_id,
+        text: message.text || '',
+        author: message.from?.username || 'Unknown',
+        platform: 'telegram',
+        timestamp: new Date(message.date * 1000).toISOString(),
+        chat: message.chat?.title || 'Unknown',
+        sentiment: this.analyzeSentiment(message.text || ''),
+        relevance: this.calculateRelevance(message.text || ''),
+        keywords: this.extractKeywords(message.text || '')
+      };
+    });
   }
 
 
@@ -451,7 +477,7 @@ class SocialMediaService {
       try {
         callback(data);
       } catch (error) {
-        logger.error('구독자 알림 중 오류 발생:', error);
+        console.error('구독자 알림 중 오류 발생:', error?.message || error?.toString() || '알 수 없는 오류');
       }
     });
   }
@@ -556,7 +582,7 @@ class SocialMediaService {
     
     if (!this.monitoringTargets[platform].includes(target)) {
       this.monitoringTargets[platform].push(target);
-      logger.info(`${platform} 모니터링 대상 추가: ${target}`);
+      console.log(`${platform} 모니터링 대상 추가: ${target}`);
     }
   }
 
@@ -568,7 +594,7 @@ class SocialMediaService {
       const index = this.monitoringTargets[platform].indexOf(target);
       if (index > -1) {
         this.monitoringTargets[platform].splice(index, 1);
-        logger.info(`${platform} 모니터링 대상 제거: ${target}`);
+        console.log(`${platform} 모니터링 대상 제거: ${target}`);
       }
     }
   }
@@ -587,7 +613,7 @@ class SocialMediaService {
       }
     }
     
-    logger.info(`키워드 추가: ${keyword} (${isKorean ? '한국어' : '영어'})`);
+    console.log(`키워드 추가: ${keyword} (${isKorean ? '한국어' : '영어'})`);
   }
 
   /**
@@ -606,7 +632,7 @@ class SocialMediaService {
       }
     }
     
-    logger.info(`키워드 제거: ${keyword} (${isKorean ? '한국어' : '영어'})`);
+    console.log(`키워드 제거: ${keyword} (${isKorean ? '한국어' : '영어'})`);
   }
 }
 

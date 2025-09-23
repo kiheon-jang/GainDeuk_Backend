@@ -143,7 +143,7 @@ router.get('/', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜 미디어 서비스 개요 조회 실패:', error);
+    logger.error('소셜 미디어 서비스 개요 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '서버 오류가 발생했습니다',
@@ -162,7 +162,7 @@ router.get('/status', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜미디어 상태 조회 실패:', error);
+    logger.error('소셜미디어 상태 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '소셜미디어 상태 조회에 실패했습니다.',
@@ -193,9 +193,9 @@ router.post('/start', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜미디어 모니터링 시작 실패:', error);
+    console.error('소셜미디어 모니터링 시작 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     
-    if (error.message.includes('이미 실행 중')) {
+    if (error?.message?.includes('이미 실행 중')) {
       return res.status(409).json({
         success: false,
         message: '소셜미디어 모니터링이 이미 실행 중입니다.'
@@ -205,7 +205,7 @@ router.post('/start', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '소셜미디어 모니터링 시작에 실패했습니다.',
-      error: error.message
+      error: error?.message || error?.toString() || '알 수 없는 오류가 발생했습니다'
     });
   }
 });
@@ -232,7 +232,7 @@ router.post('/stop', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜미디어 모니터링 중지 실패:', error);
+    logger.error('소셜미디어 모니터링 중지 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '소셜미디어 모니터링 중지에 실패했습니다.',
@@ -306,7 +306,7 @@ router.get('/data', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜미디어 데이터 조회 실패:', error);
+    logger.error('소셜미디어 데이터 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '소셜미디어 데이터 조회에 실패했습니다.',
@@ -364,7 +364,7 @@ router.post('/data/filter', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('소셜미디어 데이터 필터링 실패:', error);
+    logger.error('소셜미디어 데이터 필터링 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '소셜미디어 데이터 필터링에 실패했습니다.',
@@ -418,7 +418,7 @@ router.get('/data/sentiment', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('감정별 소셜미디어 데이터 조회 실패:', error);
+    logger.error('감정별 소셜미디어 데이터 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '감정별 소셜미디어 데이터 조회에 실패했습니다.',
@@ -475,7 +475,7 @@ router.get('/targets', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('모니터링 대상 조회 실패:', error);
+    logger.error('모니터링 대상 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '모니터링 대상 조회에 실패했습니다.',
@@ -539,7 +539,7 @@ router.post('/targets', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('모니터링 대상 추가 실패:', error);
+    logger.error('모니터링 대상 추가 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '모니터링 대상 추가에 실패했습니다.',
@@ -603,7 +603,7 @@ router.delete('/targets', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('모니터링 대상 제거 실패:', error);
+    logger.error('모니터링 대상 제거 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '모니터링 대상 제거에 실패했습니다.',
@@ -655,7 +655,7 @@ router.get('/keywords', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('모니터링 키워드 조회 실패:', error);
+    logger.error('모니터링 키워드 조회 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '모니터링 키워드 조회에 실패했습니다.',
@@ -711,7 +711,7 @@ router.post('/keywords', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('키워드 추가 실패:', error);
+    logger.error('키워드 추가 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '키워드 추가에 실패했습니다.',
@@ -767,7 +767,7 @@ router.delete('/keywords', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('키워드 제거 실패:', error);
+    logger.error('키워드 제거 실패:', error?.message || error?.toString() || '알 수 없는 오류');
     res.status(500).json({
       success: false,
       message: '키워드 제거에 실패했습니다.',

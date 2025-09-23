@@ -70,6 +70,12 @@ const cacheService = new CacheService();
  *           type: string
  *           enum: [SCALPING, DAY_TRADING, SWING_TRADING, LONG_TERM]
  *         description: 타임프레임 필터
+ *       - in: query
+ *         name: strategy
+ *         schema:
+ *           type: string
+ *           enum: [SCALPING, DAY_TRADING, SWING_TRADING, LONG_TERM]
+ *         description: 전략별 필터 (timeframe과 동일한 값 사용)
  *     responses:
  *       200:
  *         description: 신호 목록 조회 성공
@@ -109,7 +115,8 @@ router.get('/', [
   query('minScore').optional().isInt({ min: 0, max: 100 }).withMessage('최소 점수는 0-100 사이의 정수여야 합니다'),
   query('maxScore').optional().isInt({ min: 0, max: 100 }).withMessage('최대 점수는 0-100 사이의 정수여야 합니다'),
   query('action').optional().isIn(['STRONG_BUY', 'BUY', 'HOLD', 'WEAK_SELL', 'SELL', 'STRONG_SELL']).withMessage('유효하지 않은 액션입니다'),
-  query('timeframe').optional().isIn(['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM']).withMessage('유효하지 않은 타임프레임입니다')
+  query('timeframe').optional().isIn(['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM']).withMessage('유효하지 않은 타임프레임입니다'),
+  query('strategy').optional().isIn(['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM']).withMessage('유효하지 않은 전략입니다')
 ], async (req, res) => {
   try {
     // 유효성 검사
@@ -130,9 +137,10 @@ router.get('/', [
     const maxScore = req.query.maxScore ? parseInt(req.query.maxScore) : undefined;
     const action = req.query.action;
     const timeframe = req.query.timeframe;
+    const strategy = req.query.strategy;
 
     // 캐시 키 생성
-    const cacheKey = `signals:${page}:${limit}:${sort}:${order}:${minScore || 'all'}:${maxScore || 'all'}:${action || 'all'}:${timeframe || 'all'}`;
+    const cacheKey = `signals:${page}:${limit}:${sort}:${order}:${minScore || 'all'}:${maxScore || 'all'}:${action || 'all'}:${timeframe || 'all'}:${strategy || 'all'}`;
     let cachedResult = await cacheService.get(cacheKey);
 
     if (cachedResult) {
@@ -155,6 +163,11 @@ router.get('/', [
     
     if (timeframe) {
       query.timeframe = timeframe;
+    }
+    
+    // strategy 파라미터가 있으면 timeframe과 동일하게 처리
+    if (strategy) {
+      query.timeframe = strategy;
     }
 
     // 정렬 옵션 설정

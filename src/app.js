@@ -74,6 +74,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/coins', require('./routes/coins'));
 app.use('/api/signals', require('./routes/signals'));
+app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/health', require('./routes/health'));
 app.use('/api/korean-market', require('./routes/koreanMarket'));
@@ -86,6 +87,7 @@ app.use('/api/investment-strategy', require('./routes/investmentStrategy'));
 app.use('/api/real-time-optimization', require('./routes/realTimeOptimization'));
 app.use('/api/data-quality', require('./routes/dataQuality'));
 app.use('/api/performance-monitoring', require('./routes/performanceMonitoring'));
+app.use('/api/news', require('./routes/news'));
 
 // Swagger documentation
 if (process.env.NODE_ENV !== 'production') {

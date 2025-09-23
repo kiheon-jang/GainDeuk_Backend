@@ -242,6 +242,12 @@ signalSchema.statics.getSignalsByTimeframe = function(timeframe, limit = 50) {
     .limit(limit);
 };
 
+signalSchema.statics.getSignalsByStrategy = function(strategy, limit = 50) {
+  return this.find({ timeframe: strategy })
+    .sort({ finalScore: -1 })
+    .limit(limit);
+};
+
 signalSchema.statics.getSignalsByScoreRange = function(minScore, maxScore, limit = 50) {
   return this.find({
     finalScore: { $gte: minScore, $lte: maxScore }
@@ -307,6 +313,25 @@ signalSchema.statics.getTimeframeStats = function() {
         avgScore: { $avg: '$finalScore' },
         maxScore: { $max: '$finalScore' },
         minScore: { $min: '$finalScore' }
+      }
+    },
+    {
+      $sort: { count: -1 }
+    }
+  ]);
+};
+
+signalSchema.statics.getStrategyStats = function() {
+  return this.aggregate([
+    {
+      $group: {
+        _id: '$timeframe',
+        count: { $sum: 1 },
+        avgScore: { $avg: '$finalScore' },
+        maxScore: { $max: '$finalScore' },
+        minScore: { $min: '$finalScore' },
+        avgVolatility: { $avg: '$metadata.volatility' },
+        avgVolumeRatio: { $avg: '$metadata.volumeRatio' }
       }
     },
     {

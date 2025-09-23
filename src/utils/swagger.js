@@ -419,6 +419,141 @@ const options = {
             }
           }
         },
+        DashboardData: {
+          type: 'object',
+          properties: {
+            aiRecommendations: {
+              type: 'array',
+              items: {
+                $ref: '#/components/schemas/CoinRecommendation'
+              },
+              description: 'AI 추천 코인 목록'
+            },
+            userProfile: {
+              $ref: '#/components/schemas/UserProfile'
+            },
+            marketSummary: {
+              $ref: '#/components/schemas/MarketSummary'
+            }
+          }
+        },
+        CoinRecommendation: {
+          type: 'object',
+          properties: {
+            coin: {
+              $ref: '#/components/schemas/Coin'
+            },
+            expectedReturn: {
+              type: 'number',
+              description: '예상 수익률 (%)',
+              example: 15.5
+            },
+            riskLevel: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 5,
+              description: '위험도 (1=안전, 5=위험)',
+              example: 3
+            },
+            reasons: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: '추천 이유',
+              example: ['강력한 기술적 분석 신호', '높은 수익 잠재력', '안정적인 시장 지위']
+            },
+            confidence: {
+              type: 'number',
+              minimum: 0,
+              maximum: 100,
+              description: 'AI 신뢰도',
+              example: 85
+            },
+            timeframe: {
+              type: 'string',
+              description: '추천 기간',
+              example: '1-3일'
+            }
+          }
+        },
+        UserProfile: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: '사용자 ID',
+              example: 'user123'
+            },
+            investmentStyle: {
+              type: 'string',
+              enum: ['conservative', 'moderate', 'aggressive'],
+              description: '투자 스타일',
+              example: 'moderate'
+            },
+            riskTolerance: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 5,
+              description: '위험 감수성',
+              example: 3
+            },
+            experienceLevel: {
+              type: 'string',
+              enum: ['beginner', 'intermediate', 'advanced'],
+              description: '경험 수준',
+              example: 'intermediate'
+            },
+            recommendedStrategy: {
+              type: 'string',
+              description: '추천 전략',
+              example: '균형 투자'
+            },
+            preferences: {
+              type: 'object',
+              properties: {
+                notifications: {
+                  type: 'boolean',
+                  description: '알림 활성화',
+                  example: true
+                },
+                language: {
+                  type: 'string',
+                  enum: ['ko', 'en'],
+                  description: '언어 설정',
+                  example: 'ko'
+                },
+                theme: {
+                  type: 'string',
+                  enum: ['light', 'dark'],
+                  description: '테마 설정',
+                  example: 'light'
+                }
+              }
+            }
+          }
+        },
+        MarketSummary: {
+          type: 'object',
+          properties: {
+            totalMarketCap: {
+              type: 'string',
+              description: '전체 시가총액',
+              example: '$2.1T'
+            },
+            marketTrend: {
+              type: 'string',
+              enum: ['up', 'down', 'sideways'],
+              description: '시장 트렌드',
+              example: 'up'
+            },
+            trendDescription: {
+              type: 'string',
+              description: '트렌드 설명',
+              example: '시장이 상승세를 보이고 있습니다.'
+            }
+          }
+        },
         Error: {
           type: 'object',
           properties: {
@@ -494,6 +629,10 @@ const options = {
       {
         name: 'Signals',
         description: '신호 분석 관련 API'
+      },
+      {
+        name: 'Dashboard',
+        description: '대시보드 데이터 관련 API'
       },
       {
         name: 'Alerts',
