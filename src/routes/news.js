@@ -495,7 +495,7 @@ router.post('/collect', async (req, res) => {
     logger.info('📰 수동 뉴스 수집 및 감정분석 시작...');
     const startTime = Date.now();
     
-    // NewsSchedulerService 인스턴스 생성 (필요시에만)
+실제     // NewsSchedulerService 인스턴스 생성 (필요시에만)
     if (!newsScheduler) {
       newsScheduler = new NewsSchedulerService();
     }

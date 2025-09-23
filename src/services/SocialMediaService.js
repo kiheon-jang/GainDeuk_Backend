@@ -1,5 +1,6 @@
 const axios = require('axios');
-const { logger } = require('../utils/logger');
+const OAuth = require('oauth-1.0a');
+const crypto = require('crypto');
 
 /**
  * 소셜미디어 모니터링 서비스
@@ -12,14 +13,14 @@ class SocialMediaService {
     this.socialData = new Map();
     this.subscribers = new Set();
     
-    // API 설정
-    this.apiConfig = {
-      twitter: {
-        baseUrl: 'https://api.twitter.com/2',
-        bearerToken: process.env.TWITTER_BEARER_TOKEN,
-        rateLimit: 300, // 15분당 300 요청
-        lastRequest: 0
-      },
+           // API 설정
+           this.apiConfig = {
+             twitter: {
+               baseUrl: 'https://api.twitter.com/2',
+               bearerToken: process.env.TWITTER_BEARER_TOKEN,
+               rateLimit: 300, // 15분당 300 요청
+               lastRequest: 0
+             },
       telegram: {
         baseUrl: 'https://api.telegram.org/bot',
         botToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -58,8 +59,10 @@ class SocialMediaService {
    * 소셜미디어 모니터링 시작
    */
   async startMonitoring() {
+    console.log('🚀 startMonitoring 메서드 호출됨');
+    
     if (this.isRunning) {
-      logger.warn('소셜미디어 모니터링이 이미 실행 중입니다.');
+      console.log('⚠️ 소셜미디어 모니터링이 이미 실행 중입니다.');
       return;
     }
 
@@ -68,7 +71,9 @@ class SocialMediaService {
       console.log('소셜미디어 모니터링을 시작합니다.');
 
       // 초기 데이터 수집
+      console.log('📊 초기 데이터 수집 시작...');
       await this.collectInitialData();
+      console.log('📊 초기 데이터 수집 완료');
 
       // 주기적 모니터링 시작 (5분마다)
       this.monitoringInterval = setInterval(async () => {
@@ -93,7 +98,7 @@ class SocialMediaService {
    */
   stopMonitoring() {
     if (!this.isRunning) {
-      logger.warn('소셜미디어 모니터링이 실행 중이 아닙니다.');
+      console.log('⚠️ 소셜미디어 모니터링이 실행 중이 아닙니다.');
       return;
     }
 
@@ -149,11 +154,54 @@ class SocialMediaService {
 
 
   /**
+   * OAuth 1.0a 인증 헬퍼
+   */
+  getOAuthHeader(url, method = 'GET', data = {}) {
+    try {
+      console.log(`🔐 OAuth 헤더 생성 시작: ${url}`);
+      console.log(`🔑 Consumer Key: ${this.apiConfig.twitter.consumerKey ? '설정됨' : '없음'}`);
+      console.log(`🔑 Access Token: ${this.apiConfig.twitter.accessToken ? '설정됨' : '없음'}`);
+      
+      const oauth = OAuth({
+        consumer: {
+          key: this.apiConfig.twitter.consumerKey,
+          secret: this.apiConfig.twitter.consumerSecret
+        },
+        signature_method: 'HMAC-SHA1',
+        hash_function(base_string, key) {
+          return crypto
+            .createHmac('sha1', key)
+            .update(base_string)
+            .digest('base64');
+        }
+      });
+
+      const token = {
+        key: this.apiConfig.twitter.accessToken,
+        secret: this.apiConfig.twitter.accessTokenSecret
+      };
+
+      const authData = oauth.authorize({ url, method, data }, token);
+      const header = oauth.toHeader(authData);
+      
+      console.log(`✅ OAuth 헤더 생성 완료:`, Object.keys(header));
+      return header;
+    } catch (error) {
+      console.error(`❌ OAuth 헤더 생성 실패:`, error?.message);
+      throw error;
+    }
+  }
+
+  /**
    * Twitter/X 데이터 수집
    */
   async collectTwitterData() {
+    console.log('🐦 Twitter 데이터 수집 시작...');
+    console.log('🔑 Twitter API 키 확인:');
+    console.log('  Bearer Token:', this.apiConfig.twitter.bearerToken ? '설정됨' : '없음');
+    
     if (!this.apiConfig.twitter.bearerToken) {
-      console.log('Twitter Bearer Token이 설정되지 않았습니다.');
+      console.log('Twitter API v2 Bearer Token이 설정되지 않았습니다.');
       return;
     }
 
@@ -169,7 +217,9 @@ class SocialMediaService {
       // 키워드 기반 트윗 검색 (더 안정적)
       for (const keyword of this.cryptoKeywords.slice(0, 3)) { // Rate limit 고려하여 일부만
         try {
-          const response = await this.searchTwitterTweets(keyword);
+          console.log(`🔍 키워드 검색 시작: ${keyword}`);
+          const response = await this.searchTwitterTweetsV2(keyword);
+          console.log(`📊 ${keyword} 검색 결과: ${response.length}개`);
           tweets.push(...response);
         } catch (error) {
           console.error(`Twitter 키워드 ${keyword} 검색 실패:`, error?.message || error?.toString() || '알 수 없는 오류');
@@ -233,27 +283,40 @@ class SocialMediaService {
   }
 
   /**
-   * Twitter 트윗 검색
+   * Twitter 트윗 검색 (API v2)
    */
-  async searchTwitterTweets(keyword) {
+  async searchTwitterTweetsV2(keyword) {
     try {
-      const url = `${this.apiConfig.twitter.baseUrl}/tweets/search/recent`;
+      console.log(`🔍 Twitter API v2 검색 시작: ${keyword}`);
       
+      const url = `${this.apiConfig.twitter.baseUrl}/tweets/search/recent`;
+      const params = {
+        query: `${keyword} -is:retweet lang:en`,
+        max_results: 10,
+        'tweet.fields': 'created_at,public_metrics,author_id',
+        'user.fields': 'username'
+      };
+
+      console.log(`📡 API URL: ${url}`);
+      console.log(`📋 검색 파라미터:`, params);
+
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${this.apiConfig.twitter.bearerToken}`,
           'Content-Type': 'application/json'
         },
-        params: {
-          'query': `${keyword} -is:retweet lang:en`,
-          'max_results': 10,
-          'tweet.fields': 'created_at,public_metrics,context_annotations,author_id'
-        }
+        params: params
       });
 
+      console.log(`✅ Twitter API 응답 성공: ${response?.data?.data?.length || 0}개 트윗`);
       return response?.data?.data || [];
     } catch (error) {
-      console.error(`Twitter 검색 실패 (${keyword}):`, error?.response?.status, error?.response?.data?.detail || error?.message);
+      console.error(`❌ Twitter 검색 실패 (${keyword}):`, {
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: error?.response?.data,
+        message: error?.message
+      });
       return [];
     }
   }
@@ -340,13 +403,13 @@ class SocialMediaService {
 
 
   /**
-   * Twitter 데이터 처리
+   * Twitter 데이터 처리 (API v2)
    */
   processTwitterData(tweets) {
     return tweets.map(tweet => ({
       id: tweet.id,
       text: tweet.text,
-      author: tweet.author_id,
+      author: tweet.author_id || 'unknown',
       platform: 'twitter',
       timestamp: tweet.created_at,
       metrics: {
