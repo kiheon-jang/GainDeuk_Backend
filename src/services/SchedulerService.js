@@ -48,6 +48,11 @@ class SchedulerService {
         this.processHighPriorityCoins();
       });
 
+      // 중복 신호 정리 - 1시간마다
+      this.scheduleJob('duplicate-cleanup', '0 * * * *', () => {
+        this.cleanupDuplicateSignals();
+      });
+
       // 상위 500개 코인 - 15분마다
       this.scheduleJob('medium-priority', '*/15 * * * *', () => {
         this.processMediumPriorityCoins();
@@ -462,6 +467,24 @@ class SchedulerService {
     }
   }
 
+  // 중복 신호 정리
+  async cleanupDuplicateSignals() {
+    try {
+      logger.info('🧹 Starting scheduled duplicate signal cleanup...');
+      
+      const Signal = require('../models/Signal');
+      const result = await Signal.cleanupAllDuplicates();
+      
+      logger.success(`✅ Scheduled duplicate cleanup completed: ${result.processedCoins} coins processed, ${result.totalDeleted} signals deleted`);
+      
+      // 캐시 정리
+      await this.cacheService.clearPattern('signals:*');
+      
+    } catch (error) {
+      logger.error('❌ Scheduled duplicate signal cleanup failed:', error);
+    }
+  }
+
   // 수동 작업 실행
   async runJob(jobName) {
     try {
@@ -483,6 +506,9 @@ class SchedulerService {
           break;
         case 'health-check':
           await this.performHealthCheck();
+          break;
+        case 'duplicate-cleanup':
+          await this.cleanupDuplicateSignals();
           break;
         default:
           throw new Error(`Unknown job: ${jobName}`);

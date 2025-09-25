@@ -4,6 +4,7 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const Signal = require('../models/Signal');
 const CacheService = require('../services/CacheService');
+const SignalCalculatorService = require('../services/SignalCalculatorService');
 
 const cacheService = new CacheService();
 
@@ -688,10 +689,9 @@ router.post('/refresh', [
           );
           
           if (signalData && signalData.recommendation) {
-            // 기존 신호 삭제 (같은 코인, 같은 시간대)
+            // 기존 신호 삭제 (같은 코인의 모든 신호 - 실시간 매매가이드에서는 최신만 유지)
             await Signal.deleteMany({
-              coinId: coin.coinId,
-              timeframe: timeframe
+              coinId: coin.coinId
             });
 
             // 새 신호 생성
@@ -756,6 +756,300 @@ router.post('/refresh', [
     res.status(500).json({
       success: false,
       error: '서버 오류가 발생했습니다'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/signals/cleanup-duplicates:
+ *   post:
+ *     summary: 중복 신호 정리
+ *     description: 같은 코인의 중복된 신호를 정리하여 최신 신호만 유지합니다.
+ *     tags: [Signals]
+ *     parameters:
+ *       - in: query
+ *         name: coinId
+ *         schema:
+ *           type: string
+ *         description: 특정 코인 ID (선택사항, 없으면 전체 코인 처리)
+ *     responses:
+ *       200:
+ *         description: 중복 신호 정리 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "중복 신호가 성공적으로 정리되었습니다"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     processedCoins:
+ *                       type: integer
+ *                       description: 처리된 코인 수
+ *                     totalDeleted:
+ *                       type: integer
+ *                       description: 삭제된 신호 수
+ *                     totalKept:
+ *                       type: integer
+ *                       description: 유지된 신호 수
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *       500:
+ *         description: 서버 오류
+ */
+
+/**
+ * @swagger
+ * /api/signals/performance-report:
+ *   get:
+ *     summary: 성과 리포트 조회
+ *     description: 백테스팅 기반 신호 성과 리포트를 조회합니다.
+ *     tags: [Signals]
+ *     responses:
+ *       200:
+ *         description: 성과 리포트 조회 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                     metrics:
+ *                       type: object
+ *                       properties:
+ *                         scalping:
+ *                           type: object
+ *                           properties:
+ *                             target:
+ *                               type: number
+ *                               example: 0.65
+ *                             current:
+ *                               type: number
+ *                               example: 0.68
+ *                             samples:
+ *                               type: integer
+ *                               example: 150
+ *                             status:
+ *                               type: string
+ *                               example: "GOOD"
+ *                     recommendations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           timeframe:
+ *                             type: string
+ *                             example: "dayTrading"
+ *                           issue:
+ *                             type: string
+ *                             example: "Low performance: 45.2% vs target 60.0%"
+ *                           suggestion:
+ *                             type: string
+ *                             example: "Consider adjusting thresholds or improving signal quality"
+ *       500:
+ *         description: 서버 오류
+ */
+router.post('/cleanup-duplicates', async (req, res) => {
+  try {
+    const { coinId } = req.query;
+    const startTime = Date.now();
+
+    logger.info(`Starting duplicate signal cleanup${coinId ? ` for ${coinId}` : ' for all coins'}`);
+
+    let result;
+    
+    if (coinId) {
+      // 특정 코인의 중복 제거
+      result = await Signal.removeDuplicateSignals(coinId, true);
+      result.processedCoins = 1;
+    } else {
+      // 전체 코인의 중복 제거
+      result = await Signal.cleanupAllDuplicates();
+    }
+
+    const processingTime = Date.now() - startTime;
+
+    // 캐시 정리
+    await cacheService.clearPattern('signals:*');
+
+    logger.success(`Duplicate signal cleanup completed - Processed: ${result.processedCoins} coins, Deleted: ${result.totalDeleted}, Kept: ${result.totalKept} in ${processingTime}ms`);
+
+    res.json({
+      success: true,
+      message: '중복 신호가 성공적으로 정리되었습니다',
+      data: {
+        ...result,
+        processingTime,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to cleanup duplicate signals:', error);
+    res.status(500).json({
+      success: false,
+      error: '중복 신호 정리에 실패했습니다',
+      details: error.message
+    });
+  }
+});
+
+// 성과 리포트 조회
+router.get('/performance-report', async (req, res) => {
+  try {
+    const signalCalculator = new SignalCalculatorService();
+    const report = signalCalculator.generatePerformanceReport();
+    
+    if (!report) {
+      return res.status(500).json({
+        success: false,
+        error: '성과 리포트 생성에 실패했습니다'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: report
+    });
+    
+  } catch (error) {
+    logger.error('Failed to generate performance report:', error);
+    res.status(500).json({
+      success: false,
+      error: '성과 리포트 조회에 실패했습니다',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/signals/backtest:
+ *   post:
+ *     summary: 백테스팅 실행
+ *     description: 지정된 기간에 대해 백테스팅을 실행하여 시그널 성과를 검증합니다.
+ *     tags: [Signals]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               startDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2024-01-01"
+ *                 description: 백테스팅 시작 날짜
+ *               endDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2024-12-31"
+ *                 description: 백테스팅 종료 날짜
+ *               initialCapital:
+ *                 type: number
+ *                 example: 10000
+ *                 description: 초기 자본 (기본값: 10000)
+ *     responses:
+ *       200:
+ *         description: 백테스팅 실행 성공
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     trades:
+ *                       type: array
+ *                       description: 거래 내역
+ *                     performance:
+ *                       type: object
+ *                       properties:
+ *                         totalSignals:
+ *                           type: integer
+ *                           example: 150
+ *                         successfulSignals:
+ *                           type: integer
+ *                           example: 95
+ *                         winRate:
+ *                           type: number
+ *                           example: 63.33
+ *                         totalReturn:
+ *                           type: number
+ *                           example: 2500
+ *                         maxDrawdown:
+ *                           type: number
+ *                           example: 0.15
+ *                         sharpeRatio:
+ *                           type: number
+ *                           example: 1.25
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         totalTrades:
+ *                           type: integer
+ *                           example: 150
+ *                         initialCapital:
+ *                           type: number
+ *                           example: 10000
+ *                         finalCapital:
+ *                           type: number
+ *                           example: 12500
+ *                         totalReturn:
+ *                           type: number
+ *                           example: 25.0
+ *                         maxDrawdown:
+ *                           type: number
+ *                           example: 15.0
+ *       500:
+ *         description: 서버 오류
+ */
+router.post('/backtest', async (req, res) => {
+  try {
+    const { startDate, endDate, initialCapital = 10000 } = req.body;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: '시작 날짜와 종료 날짜가 필요합니다'
+      });
+    }
+    
+    const signalCalculator = new SignalCalculatorService();
+    const backtestResult = await signalCalculator.runBacktest(startDate, endDate, initialCapital);
+    
+    res.json({
+      success: true,
+      data: backtestResult
+    });
+    
+  } catch (error) {
+    logger.error('Failed to run backtest:', error);
+    res.status(500).json({
+      success: false,
+      error: '백테스팅 실행에 실패했습니다',
+      details: error.message
     });
   }
 });

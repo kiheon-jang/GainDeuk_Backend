@@ -214,15 +214,32 @@ class SocialMediaService {
 
       const tweets = [];
       
-      // 키워드 기반 트윗 검색 (더 안정적)
-      for (const keyword of this.cryptoKeywords.slice(0, 3)) { // Rate limit 고려하여 일부만
+      // 키워드 기반 트윗 검색 (Rate limiting 개선)
+      for (const keyword of this.cryptoKeywords.slice(0, 2)) { // 3 → 2로 줄여서 Rate limit 방지
         try {
           console.log(`🔍 키워드 검색 시작: ${keyword}`);
+          
+          // Rate limit 체크 (각 키워드마다)
+          if (!this.checkRateLimit('twitter')) {
+            console.log(`Twitter API Rate limit 도달 - ${keyword} 검색 건너뛰기`);
+            break;
+          }
+          
           const response = await this.searchTwitterTweetsV2(keyword);
           console.log(`📊 ${keyword} 검색 결과: ${response.length}개`);
           tweets.push(...response);
+          
+          // 요청 간 지연 (Rate limit 방지)
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
         } catch (error) {
           console.error(`Twitter 키워드 ${keyword} 검색 실패:`, error?.message || error?.toString() || '알 수 없는 오류');
+          
+          // 429 오류 (Rate limit)인 경우 더 긴 대기
+          if (error?.response?.status === 429) {
+            console.log('⏳ Rate limit 도달 - 5분 대기...');
+            await new Promise(resolve => setTimeout(resolve, 300000)); // 5분 대기
+          }
         }
       }
 
@@ -502,13 +519,36 @@ class SocialMediaService {
   }
 
   /**
-   * Rate limiting 체크
+   * Rate limiting 체크 (개선된 버전)
    */
   checkRateLimit(platform) {
     const config = this.apiConfig[platform];
     const now = Date.now();
     const timeSinceLastRequest = now - config.lastRequest;
     
+    // Twitter API v2 Rate limit: 15분당 300 요청
+    if (platform === 'twitter') {
+      const timeWindow = 15 * 60 * 1000; // 15분
+      const requestLimit = 300;
+      
+      // 요청 카운터 초기화 (15분마다)
+      if (!config.requestCount) config.requestCount = 0;
+      if (!config.windowStart) config.windowStart = now;
+      
+      if (now - config.windowStart > timeWindow) {
+        config.requestCount = 0;
+        config.windowStart = now;
+      }
+      
+      if (config.requestCount >= requestLimit) {
+        console.log(`⏳ Twitter API Rate limit 도달: ${config.requestCount}/${requestLimit}`);
+        return false;
+      }
+      
+      config.requestCount++;
+    }
+    
+    // 기본 Rate limiting (요청 간 최소 간격)
     if (timeSinceLastRequest < (1000 / config.rateLimit)) {
       return false;
     }

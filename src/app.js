@@ -89,6 +89,7 @@ app.use('/api/real-time-optimization', require('./routes/realTimeOptimization'))
 app.use('/api/data-quality', require('./routes/dataQuality'));
 app.use('/api/performance-monitoring', require('./routes/performanceMonitoring'));
 app.use('/api/news', require('./routes/news'));
+app.use('/api/trading-strategies', require('./routes/tradingStrategies'));
 
 // Swagger documentation
 if (process.env.NODE_ENV !== 'production') {

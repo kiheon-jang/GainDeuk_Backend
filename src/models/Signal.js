@@ -56,6 +56,24 @@ const signalSchema = new mongoose.Schema({
       min: 0,
       max: 100,
       default: 50
+    },
+    volatility: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    },
+    correlation: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    },
+    macro: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
     }
   },
   recommendation: {
@@ -72,12 +90,12 @@ const signalSchema = new mongoose.Schema({
   },
   timeframe: {
     type: String,
-    enum: ['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM'],
+    enum: ['SCALPING', 'DAY_TRADING', 'SWING_TRADING', 'LONG_TERM', 'REJECT'],
     required: true
   },
   priority: {
     type: String,
-    enum: ['high_priority', 'medium_priority', 'low_priority'],
+    enum: ['high_priority', 'medium_priority', 'low_priority', 'rejected'],
     required: true
   },
   rank: {
@@ -126,6 +144,20 @@ const signalSchema = new mongoose.Schema({
       type: String,
       enum: ['excellent', 'good', 'fair', 'poor'],
       default: 'good'
+    },
+    strategy: {
+      determinedBy: String,
+      timeframe: String,
+      score: Number,
+      volatility: Number,
+      volumeRatio: Number,
+      riskScore: Number,
+      liquidityGrade: String,
+      technicalStrength: Number,
+      tradingStrategy: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+      }
     }
   }
 }, {
@@ -193,10 +225,35 @@ signalSchema.methods.getRecommendation = function(score) {
 };
 
 signalSchema.methods.getTimeframe = function(score) {
-  if (score >= 90 || score <= 10) return 'SCALPING';
-  if (score >= 80 || score <= 20) return 'DAY_TRADING';
-  if (score >= 70 || score <= 30) return 'SWING_TRADING';
-  return 'LONG_TERM';
+  // 보편적인 타임프레임 분류: 점수 + 변동성 + 거래량 기반
+  const volatility = this.metadata?.volatility || 0;
+  const volumeRatio = this.metadata?.volumeRatio || 1;
+  const marketCapRank = this.metadata?.marketCapRank || 999999;
+  
+  // 변동성 점수 (0-100)
+  const volatilityScore = Math.min(volatility * 10, 100);
+  
+  // 거래량 점수 (0-100)
+  const volumeScore = Math.min((volumeRatio - 1) * 50, 100);
+  
+  // 시장 규모 점수 (상위 코인일수록 높은 점수)
+  const marketCapScore = marketCapRank <= 100 ? 100 : 
+                        marketCapRank <= 500 ? 70 : 
+                        marketCapRank <= 1000 ? 40 : 10;
+  
+  // 종합 점수 계산 (가중 평균)
+  const compositeScore = (score * 0.4) + (volatilityScore * 0.3) + (volumeScore * 0.2) + (marketCapScore * 0.1);
+  
+  // 타임프레임 분류
+  if (compositeScore >= 80 || compositeScore <= 20) {
+    return 'SCALPING'; // 고변동성 + 강한 신호
+  } else if (compositeScore >= 65 || compositeScore <= 35) {
+    return 'DAY_TRADING'; // 중고변동성 + 중강한 신호
+  } else if (compositeScore >= 50 || compositeScore <= 50) {
+    return 'SWING_TRADING'; // 중변동성 + 중간 신호
+  } else {
+    return 'LONG_TERM'; // 저변동성 + 약한 신호
+  }
 };
 
 signalSchema.methods.getBreakdownPercentage = function() {
@@ -338,6 +395,79 @@ signalSchema.statics.getStrategyStats = function() {
       $sort: { count: -1 }
     }
   ]);
+};
+
+// 중복 제거 메서드 - 같은 코인의 오래된 신호 삭제
+signalSchema.statics.removeDuplicateSignals = async function(coinId, keepLatest = true) {
+  try {
+    // 같은 코인의 모든 신호 조회 (생성일 기준 정렬)
+    const signals = await this.find({ coinId })
+      .sort({ createdAt: keepLatest ? -1 : 1 })
+      .lean();
+
+    if (signals.length <= 1) {
+      return { deleted: 0, kept: signals.length };
+    }
+
+    // 최신(또는 가장 오래된) 신호를 제외한 나머지 삭제
+    const signalToKeep = signals[0];
+    const signalsToDelete = signals.slice(1);
+
+    if (signalsToDelete.length > 0) {
+      const deleteResult = await this.deleteMany({
+        _id: { $in: signalsToDelete.map(s => s._id) }
+      });
+
+      console.log(`🧹 중복 신호 정리: ${coinId} - ${deleteResult.deletedCount}개 삭제, 1개 유지`);
+      
+      return {
+        deleted: deleteResult.deletedCount,
+        kept: 1,
+        keptSignal: signalToKeep
+      };
+    }
+
+    return { deleted: 0, kept: 1, keptSignal: signalToKeep };
+  } catch (error) {
+    console.error(`중복 신호 제거 실패 (${coinId}):`, error.message);
+    throw error;
+  }
+};
+
+// 모든 코인에 대해 중복 제거 실행
+signalSchema.statics.cleanupAllDuplicates = async function() {
+  try {
+    console.log('🧹 전체 중복 신호 정리 시작...');
+    
+    // 모든 고유한 coinId 조회
+    const uniqueCoinIds = await this.distinct('coinId');
+    let totalDeleted = 0;
+    let totalKept = 0;
+    let processedCoins = 0;
+
+    for (const coinId of uniqueCoinIds) {
+      try {
+        const result = await this.removeDuplicateSignals(coinId, true);
+        totalDeleted += result.deleted;
+        totalKept += result.kept;
+        processedCoins++;
+      } catch (error) {
+        console.error(`코인 ${coinId} 중복 제거 실패:`, error.message);
+      }
+    }
+
+    console.log(`✅ 중복 신호 정리 완료: ${processedCoins}개 코인 처리, ${totalDeleted}개 삭제, ${totalKept}개 유지`);
+    
+    return {
+      processedCoins,
+      totalDeleted,
+      totalKept,
+      timestamp: new Date()
+    };
+  } catch (error) {
+    console.error('전체 중복 신호 정리 실패:', error.message);
+    throw error;
+  }
 };
 
 // 미들웨어

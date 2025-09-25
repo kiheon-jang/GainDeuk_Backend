@@ -166,8 +166,8 @@ class WhaleService {
           whaleData = await this.getETHWhaleTransactions();
           break;
         default:
-          // 다른 코인들은 기본값 또는 추후 확장
-          logger.info(`Whale tracking not implemented for ${symbol}`);
+          // 다른 코인들에 대한 일반적인 고래 활동 분석
+          whaleData = await this.getGenericWhaleActivity(symbol);
           break;
       }
 
@@ -179,6 +179,75 @@ class WhaleService {
     } catch (error) {
       logger.error(`Failed to calculate whale activity score for ${coinSymbol}:`, error);
       return 50; // 기본값
+    }
+  }
+
+  // 일반적인 코인에 대한 고래 활동 분석 (거래량 기반)
+  async getGenericWhaleActivity(symbol) {
+    try {
+      const cacheKey = `whale:generic:${symbol.toLowerCase()}`;
+      let cachedData = await this.cacheService.getWhaleData(symbol.toLowerCase());
+      
+      if (cachedData) {
+        logger.info(`Generic whale data for ${symbol} loaded from cache`);
+        return cachedData;
+      }
+
+      // CoinGecko API를 통한 거래량 분석
+      const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${symbol.toLowerCase()}`, {
+        params: {
+          localization: false,
+          tickers: false,
+          market_data: true,
+          community_data: false,
+          developer_data: false,
+          sparkline: false
+        },
+        timeout: 10000
+      });
+
+      const marketData = response.data.market_data;
+      const volume24h = marketData.total_volume?.usd || 0;
+      const marketCap = marketData.market_cap?.usd || 0;
+      const priceChange24h = Math.abs(marketData.price_change_percentage_24h || 0);
+
+      // 거래량과 시가총액 비율로 고래 활동 추정
+      const volumeToMarketCapRatio = marketCap > 0 ? volume24h / marketCap : 0;
+      
+      // 고래 활동 지표 계산
+      let whaleCount = 0;
+      let totalVolume = 0;
+      let avgSize = 0;
+
+      // 거래량이 시가총액의 5% 이상이면 고래 활동이 있다고 가정
+      if (volumeToMarketCapRatio > 0.05) {
+        whaleCount = Math.min(Math.floor(volumeToMarketCapRatio * 100), 50);
+        totalVolume = volume24h * 0.1; // 거래량의 10%를 고래 거래로 가정
+        avgSize = totalVolume / whaleCount;
+      }
+
+      // 가격 변동성이 높으면 고래 활동 증가
+      if (priceChange24h > 10) {
+        whaleCount = Math.min(whaleCount * 1.5, 50);
+      }
+
+      const genericWhaleData = {
+        whaleCount: Math.floor(whaleCount),
+        totalVolume: totalVolume,
+        avgSize: avgSize,
+        volumeRatio: volumeToMarketCapRatio,
+        priceChange: priceChange24h,
+        timestamp: new Date()
+      };
+
+      // 15분 캐시
+      await this.cacheService.setWhaleData(symbol.toLowerCase(), genericWhaleData);
+      
+      logger.info(`Generic whale analysis for ${symbol}: ${whaleCount} estimated whale transactions`);
+      return genericWhaleData;
+    } catch (error) {
+      logger.warning(`Failed to get generic whale activity for ${symbol}:`, error.message);
+      return { whaleCount: 0, totalVolume: 0, avgSize: 0 };
     }
   }
 
